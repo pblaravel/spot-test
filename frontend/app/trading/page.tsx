@@ -188,7 +188,7 @@ export default function TradingPage() {
     <div className="min-h-screen bg-[#f4f6fa] text-slate-900">
       {/* Верхняя панель пары */}
       <header className="border-b border-slate-200/80 bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-3 flex flex-wrap items-end justify-between gap-4">
+        <div className="w-full px-4 py-3 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-sm text-slate-500 font-medium">{PAIR_DISPLAY}</div>
             <div className="text-3xl font-semibold tabular-nums" style={{ color: BUY }}>
@@ -207,7 +207,7 @@ export default function TradingPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-4 space-y-4">
+      <div className="w-full px-4 py-4 space-y-4">
         {loadErr && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
             {loadErr}. Убедитесь, что запущены order-book-service и api-gateway (маршрут{" "}

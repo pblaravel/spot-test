@@ -13,22 +13,22 @@ export function Navigation() {
   const { isAuthenticated, user, logout } = useAuth()
 
   // Скрываем навигацию на страницах авторизованных пользователей
+  const authPaths = [
+    "/dashboard",
+    "/portfolio",
+    "/transactions",
+    "/buy",
+    "/sell",
+    "/deposit",
+    "/withdraw",
+    "/profile",
+    "/settings",
+    "/referral",
+    "/support",
+  ]
   const hideNavigation =
-    isAuthenticated &&
-    [
-      "/dashboard",
-      "/portfolio",
-      "/trading",
-      "/transactions",
-      "/buy",
-      "/sell",
-      "/deposit",
-      "/withdraw",
-      "/profile",
-      "/settings",
-      "/referral",
-      "/support",
-    ].some((path) => pathname.startsWith(path))
+    (isAuthenticated && authPaths.some((path) => pathname.startsWith(path))) ||
+    pathname.startsWith("/trading")
 
   if (hideNavigation) return null
 
