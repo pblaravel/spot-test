@@ -16,8 +16,29 @@ import {
   Wallet,
 } from "@/lib/api-client"
 
-const PAIR_DISPLAY = "BTC/USDT"
-const ORDER_BOOK_SYMBOL = "BTCUSDT"
+interface MarketPair {
+  /** Символ в order-book-service (без слэша, верхний регистр). */
+  symbol: string
+  /** Человекочитаемое отображение пары. */
+  display: string
+  /** Базовая валюта (BTC/ETH/BNB). */
+  base: string
+  /** Котируемая валюта (USDT). */
+  quote: string
+  /** Количество знаков после запятой для цены в UI. */
+  priceDigits: number
+  /** Количество знаков после запятой для объёма в базовой валюте. */
+  qtyDigits: number
+}
+
+const MARKETS: MarketPair[] = [
+  { symbol: "BTCUSDT", display: "BTC/USDT", base: "BTC", quote: "USDT", priceDigits: 2, qtyDigits: 6 },
+  { symbol: "ETHUSDT", display: "ETH/USDT", base: "ETH", quote: "USDT", priceDigits: 2, qtyDigits: 6 },
+  { symbol: "BNBUSDT", display: "BNB/USDT", base: "BNB", quote: "USDT", priceDigits: 4, qtyDigits: 4 },
+]
+
+const DEFAULT_MARKET = MARKETS[0]
+
 const FEE_RATE = 0.001
 
 const ACCENT = "#4A80F0"
@@ -46,6 +67,8 @@ function fmtMoney(n: number): string {
 }
 
 export default function TradingPage() {
+  const [market, setMarket] = useState<MarketPair>(DEFAULT_MARKET)
+  const [snapshots, setSnapshots] = useState<Record<string, ExchangeOrderBookSnapshot>>({})
   const [snapshot, setSnapshot] = useState<ExchangeOrderBookSnapshot | null>(null)
   const [trades, setTrades] = useState<ExchangeTrade[]>([])
   const [usdtWallet, setUsdtWallet] = useState<Wallet | null>(null)
@@ -58,22 +81,27 @@ export default function TradingPage() {
   const [sellAmount, setSellAmount] = useState("")
   const [submitting, setSubmitting] = useState<"buy" | "sell" | null>(null)
 
-  const loadBook = useCallback(async () => {
-    const res = await apiClient.getExchangeOrderBook(ORDER_BOOK_SYMBOL)
+  const loadBook = useCallback(async (sym: string) => {
+    const res = await apiClient.getExchangeOrderBook(sym)
     if (res.error || !res.data) {
-      setLoadErr(res.error || "Стакан недоступен")
-      setSnapshot(null)
+      if (sym === market.symbol) {
+        setLoadErr(res.error || "Стакан недоступен")
+        setSnapshot(null)
+      }
     } else {
-      setLoadErr(null)
-      setSnapshot(res.data)
+      if (sym === market.symbol) {
+        setLoadErr(null)
+        setSnapshot(res.data)
+      }
+      setSnapshots((prev) => ({ ...prev, [sym]: res.data! }))
     }
-    setLoading(false)
-  }, [])
+    if (sym === market.symbol) setLoading(false)
+  }, [market.symbol])
 
-  const loadTrades = useCallback(async () => {
-    const res = await apiClient.getExchangeTrades(ORDER_BOOK_SYMBOL)
-    if (res.data?.trades) setTrades(res.data.trades)
-  }, [])
+  const loadTrades = useCallback(async (sym: string) => {
+    const res = await apiClient.getExchangeTrades(sym)
+    if (sym === market.symbol && res.data?.trades) setTrades(res.data.trades)
+  }, [market.symbol])
 
   const loadWallet = useCallback(async () => {
     const w = await apiClient.getMyUsdtWallet()
@@ -82,15 +110,31 @@ export default function TradingPage() {
   }, [])
 
   useEffect(() => {
-    void loadBook()
-    void loadTrades()
+    setLoading(true)
+    setTrades([])
+    setBuyPrice("")
+    setSellPrice("")
+  }, [market.symbol])
+
+  useEffect(() => {
+    void loadBook(market.symbol)
+    void loadTrades(market.symbol)
     void loadWallet()
+
+    // Подтягиваем стаканы по всем парам, чтобы корректно показывать Δ24ч/last в списке рынков.
+    MARKETS.forEach((m) => {
+      if (m.symbol !== market.symbol) void loadBook(m.symbol)
+    })
+
     const t = setInterval(() => {
-      void loadBook()
-      void loadTrades()
-    }, 2000)
+      void loadBook(market.symbol)
+      void loadTrades(market.symbol)
+      MARKETS.forEach((m) => {
+        if (m.symbol !== market.symbol) void loadBook(m.symbol)
+      })
+    }, 2500)
     return () => clearInterval(t)
-  }, [loadBook, loadTrades, loadWallet])
+  }, [loadBook, loadTrades, loadWallet, market.symbol])
 
   const bestBid = snapshot?.bids?.[0]
   const bestAsk = snapshot?.asks?.[0]
@@ -162,7 +206,7 @@ export default function TradingPage() {
     try {
       const px = parseDec(priceStr)
       const res = await apiClient.createExchangeOrder({
-        symbol: ORDER_BOOK_SYMBOL,
+        symbol: market.symbol,
         side,
         type: orderMode,
         quantity: amtStr.trim().replace(",", "."),
@@ -175,8 +219,8 @@ export default function TradingPage() {
       toast.success(side === "buy" ? "Заявка на покупку отправлена" : "Заявка на продажу отправлена", {
         description: `ID: ${res.data.order_id}`,
       })
-      void loadBook()
-      void loadTrades()
+      void loadBook(market.symbol)
+      void loadTrades(market.symbol)
     } finally {
       setSubmitting(null)
     }
@@ -190,16 +234,16 @@ export default function TradingPage() {
       <header className="border-b border-slate-200/80 bg-white shadow-sm">
         <div className="w-full px-4 py-3 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-sm text-slate-500 font-medium">{PAIR_DISPLAY}</div>
+            <div className="text-sm text-slate-500 font-medium">{market.display}</div>
             <div className="text-3xl font-semibold tabular-nums" style={{ color: BUY }}>
               {Number.isFinite(mid) ? fmtMoney(mid) : "—"}{" "}
-              <span className="text-lg font-normal text-slate-500">USDT</span>
+              <span className="text-lg font-normal text-slate-500">{market.quote}</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-6 text-sm">
             <Stat label="Спред" value={`${fmtNum(spreadPct, 3)}%`} valueClass={pctClass} />
-            <Stat label="Объём стакана (BTC)" value={fmtNum(volBase, 8)} />
-            <Stat label="Оборот стакана (USDT)" value={fmtMoney(volQuote)} />
+            <Stat label={`Объём стакана (${market.base})`} value={fmtNum(volBase, 8)} />
+            <Stat label={`Оборот стакана (${market.quote})`} value={fmtMoney(volQuote)} />
             {usdtWallet && (
               <Stat label="Баланс USDT" value={fmtMoney(Number(usdtWallet.balance))} valueClass="text-slate-800" />
             )}
@@ -216,29 +260,53 @@ export default function TradingPage() {
         )}
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-          {/* Список пар (упрощённо) */}
+          {/* Список пар */}
           <aside className="xl:col-span-2">
             <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden">
               <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-50 border-b">
                 Рынки
               </div>
               <div className="p-2 text-sm">
-                <div className="grid grid-cols-3 gap-1 px-2 py-1 text-xs text-slate-500 border-b">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2 py-1 text-xs text-slate-500 border-b">
                   <span>Пара</span>
                   <span className="text-right">Цена</span>
-                  <span className="text-right">Δ</span>
+                  <span className="text-right">Спред</span>
                 </div>
-                <button
-                  type="button"
-                  className="w-full grid grid-cols-3 gap-1 px-2 py-2 rounded-lg text-left hover:bg-slate-50"
-                  style={{ borderLeft: `3px solid ${ACCENT}` }}
-                >
-                  <span className="font-medium">{PAIR_DISPLAY}</span>
-                  <span className="text-right tabular-nums" style={{ color: BUY }}>
-                    {Number.isFinite(mid) ? fmtMoney(mid) : "—"}
-                  </span>
-                  <span className="text-right text-xs text-slate-400">—</span>
-                </button>
+                {MARKETS.map((m) => {
+                  const snap = snapshots[m.symbol]
+                  const bb = snap?.bids?.[0]
+                  const ba = snap?.asks?.[0]
+                  const midM =
+                    bb && ba
+                      ? (parseDec(bb.price) + parseDec(ba.price)) / 2
+                      : bb
+                        ? parseDec(bb.price)
+                        : ba
+                          ? parseDec(ba.price)
+                          : NaN
+                  const spr =
+                    bb && ba && parseDec(bb.price) > 0
+                      ? ((parseDec(ba.price) - parseDec(bb.price)) / parseDec(bb.price)) * 100
+                      : 0
+                  const isActive = m.symbol === market.symbol
+                  return (
+                    <button
+                      key={m.symbol}
+                      type="button"
+                      className={`w-full grid grid-cols-[1fr_auto_auto] gap-2 px-2 py-2 rounded-lg text-left hover:bg-slate-50 ${isActive ? "bg-slate-50" : ""}`}
+                      style={{ borderLeft: `3px solid ${isActive ? ACCENT : "transparent"}` }}
+                      onClick={() => setMarket(m)}
+                    >
+                      <span className="font-medium">{m.display}</span>
+                      <span className="text-right tabular-nums" style={{ color: BUY }}>
+                        {Number.isFinite(midM) ? fmtMoney(midM) : "—"}
+                      </span>
+                      <span className="text-right text-xs text-slate-500 tabular-nums">
+                        {Number.isFinite(spr) && spr !== 0 ? `${fmtNum(spr, 3)}%` : "—"}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </Card>
           </aside>
@@ -276,12 +344,12 @@ export default function TradingPage() {
             <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden h-[420px] flex flex-col">
               <div className="px-3 py-2 text-sm font-semibold bg-white border-b flex justify-between items-center">
                 <span>Сделки</span>
-                <span className="text-xs font-normal text-slate-400">{ORDER_BOOK_SYMBOL}</span>
+                <span className="text-xs font-normal text-slate-400">{market.symbol}</span>
               </div>
               <div className="grid grid-cols-4 gap-0 text-[11px] text-slate-500 uppercase px-2 py-1.5 border-b bg-slate-50">
-                <span>Цена USDT</span>
-                <span className="text-right">BTC</span>
-                <span className="text-right">USDT</span>
+                <span>Цена {market.quote}</span>
+                <span className="text-right">{market.base}</span>
+                <span className="text-right">{market.quote}</span>
                 <span className="text-right">Время</span>
               </div>
               <div className="flex-1 overflow-y-auto text-sm">
@@ -316,7 +384,9 @@ export default function TradingPage() {
             title="Ордера на продажу"
             accent={SELL}
             rows={asksDisplay}
-            sumHeader="Σ BTC"
+            sumHeader={`Σ ${market.base}`}
+            baseLabel={market.base}
+            quoteLabel={market.quote}
             className="lg:col-span-3"
           />
           <div className="lg:col-span-6">
@@ -342,17 +412,17 @@ export default function TradingPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
                 <div className="p-4 space-y-3 bg-white">
                   <div className="text-sm font-semibold" style={{ color: BUY }}>
-                    Купить BTC
+                    Купить {market.base}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-slate-500">Цена (USDT)</Label>
+                    <Label className="text-xs text-slate-500">Цена ({market.quote})</Label>
                     <Input
                       value={buyPrice}
                       onChange={(e) => setBuyPrice(e.target.value)}
                       disabled={orderMode === "market"}
                       className="rounded-lg border-slate-200"
                     />
-                    <Label className="text-xs text-slate-500">Количество (BTC)</Label>
+                    <Label className="text-xs text-slate-500">Количество ({market.base})</Label>
                     <Input value={buyAmount} onChange={(e) => setBuyAmount(e.target.value)} className="rounded-lg border-slate-200" />
                     <div className="flex gap-1 pt-1">
                       {[25, 50, 75, 100].map((p) => (
@@ -363,7 +433,7 @@ export default function TradingPage() {
                           size="sm"
                           className="flex-1 text-xs h-8"
                           onClick={() => {
-                            /* заглушка: без баланса BTC не считаем % */
+                            /* Без балансов базовых валют в UI процент не рассчитываем. */
                           }}
                         >
                           {p}%
@@ -375,7 +445,7 @@ export default function TradingPage() {
                       {fmtMoney(
                         parseDec(buyAmount) * (orderMode === "market" && Number.isFinite(mid) ? mid : parseDec(buyPrice)),
                       )}{" "}
-                      USDT · комиссия {FEE_RATE * 100}%
+                      {market.quote} · комиссия {FEE_RATE * 100}%
                     </div>
                   </div>
                   {!usdtWallet ? (
@@ -389,30 +459,30 @@ export default function TradingPage() {
                       disabled={!!submitting}
                       onClick={() => void place("buy")}
                     >
-                      {submitting === "buy" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : "Купить BTC"}
+                      {submitting === "buy" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : `Купить ${market.base}`}
                     </Button>
                   )}
                 </div>
                 <div className="p-4 space-y-3 bg-white">
                   <div className="text-sm font-semibold" style={{ color: SELL }}>
-                    Продать BTC
+                    Продать {market.base}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-slate-500">Цена (USDT)</Label>
+                    <Label className="text-xs text-slate-500">Цена ({market.quote})</Label>
                     <Input
                       value={sellPrice}
                       onChange={(e) => setSellPrice(e.target.value)}
                       disabled={orderMode === "market"}
                       className="rounded-lg border-slate-200"
                     />
-                    <Label className="text-xs text-slate-500">Количество (BTC)</Label>
+                    <Label className="text-xs text-slate-500">Количество ({market.base})</Label>
                     <Input value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} className="rounded-lg border-slate-200" />
                     <div className="text-xs text-slate-500 pt-6">
                       Получите ≈{" "}
                       {fmtMoney(
                         parseDec(sellAmount) * (orderMode === "market" && Number.isFinite(mid) ? mid : parseDec(sellPrice)),
                       )}{" "}
-                      USDT
+                      {market.quote}
                     </div>
                   </div>
                   {!usdtWallet ? (
@@ -426,7 +496,7 @@ export default function TradingPage() {
                       disabled={!!submitting}
                       onClick={() => void place("sell")}
                     >
-                      {submitting === "sell" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : "Продать BTC"}
+                      {submitting === "sell" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : `Продать ${market.base}`}
                     </Button>
                   )}
                 </div>
@@ -437,7 +507,9 @@ export default function TradingPage() {
             title="Ордера на покупку"
             accent={BUY}
             rows={bidsDisplay}
-            sumHeader="Σ USDT"
+            sumHeader={`Σ ${market.quote}`}
+            baseLabel={market.base}
+            quoteLabel={market.quote}
             className="lg:col-span-3"
           />
         </div>
@@ -468,29 +540,33 @@ function OrderBookPanel({
   accent,
   rows,
   sumHeader,
+  baseLabel,
+  quoteLabel,
   className,
 }: {
   title: string
   accent: string
   rows: ExchangeOrderBookEntry[]
   sumHeader: string
+  baseLabel: string
+  quoteLabel: string
   className?: string
 }) {
-  const sumBtc = rows.reduce((s, r) => s + parseDec(r.quantity), 0)
-  const sumUsdt = rows.reduce((s, r) => s + parseDec(r.quantity) * parseDec(r.price), 0)
+  const sumBase = rows.reduce((s, r) => s + parseDec(r.quantity), 0)
+  const sumQuote = rows.reduce((s, r) => s + parseDec(r.quantity) * parseDec(r.price), 0)
 
   return (
     <Card className={`rounded-xl border-slate-200 shadow-sm overflow-hidden ${className ?? ""}`}>
       <div className="px-3 py-2 flex justify-between items-center text-sm font-semibold bg-white border-b">
         <span>{title}</span>
         <span className="text-xs font-normal tabular-nums text-slate-500">
-          {sumHeader}: {title.includes("продажу") ? fmtNum(sumBtc, 8) : fmtMoney(sumUsdt)}
+          {sumHeader}: {title.includes("продажу") ? fmtNum(sumBase, 8) : fmtMoney(sumQuote)}
         </span>
       </div>
       <div className="grid grid-cols-3 gap-0 text-[11px] text-slate-500 uppercase px-2 py-1.5 border-b bg-slate-50">
         <span>Цена</span>
-        <span className="text-right">BTC</span>
-        <span className="text-right">USDT</span>
+        <span className="text-right">{baseLabel}</span>
+        <span className="text-right">{quoteLabel}</span>
       </div>
       <div className="max-h-[340px] overflow-y-auto bg-white text-sm">
         {rows.length === 0 ? (

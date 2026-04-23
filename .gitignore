@@ -118,4 +118,7 @@ influxdb_data/
 postgres_data/
 
 # Redis data
-redis_data/ 
+redis_data/
+
+# binary from local go build
+order-book-service/order-book-service
