@@ -27,8 +27,38 @@ export interface Wallet {
   currency: string;
   balance: number;
   lockedBalance: number;
+  totalDeposited?: number;
+  totalWithdrawn?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Публичные данные стакана (CCXT-совместимый ответ gateway /spot) */
+export interface SpotOrderBook {
+  symbol: string;
+  timestamp: number;
+  bids: [number, number][];
+  asks: [number, number][];
+}
+
+export interface SpotTicker {
+  symbol: string;
+  last: number;
+  high?: number;
+  low?: number;
+  percentage?: number;
+  change?: number;
+  baseVolume?: number;
+  quoteVolume?: number;
+}
+
+export interface SpotTrade {
+  id: string;
+  timestamp: number;
+  datetime: string;
+  side: 'buy' | 'sell';
+  price: number;
+  amount: number;
 }
 
 export interface Transaction {
@@ -159,6 +189,26 @@ class ApiClient {
   // Wallet API
   async getWallets(): Promise<ApiResponse<Wallet[]>> {
     return this.request('/api/wallet/wallets');
+  }
+
+  /** USDT-кошелёк текущего пользователя (JWT), через api-gateway */
+  async getMyUsdtWallet(): Promise<ApiResponse<Wallet>> {
+    return this.request('/api/wallet/me/usdt');
+  }
+
+  async getSpotTicker(symbol: string): Promise<ApiResponse<SpotTicker>> {
+    const encoded = encodeURIComponent(symbol);
+    return this.request(`/spot/ticker/${encoded}`);
+  }
+
+  async getSpotOrderBook(symbol: string, limit = 12): Promise<ApiResponse<SpotOrderBook>> {
+    const encoded = encodeURIComponent(symbol);
+    return this.request(`/spot/orderbook/${encoded}?limit=${limit}`);
+  }
+
+  async getSpotTrades(symbol: string, limit = 8): Promise<ApiResponse<SpotTrade[]>> {
+    const encoded = encodeURIComponent(symbol);
+    return this.request(`/spot/trades/${encoded}?limit=${limit}`);
   }
 
   async getWallet(walletId: string): Promise<ApiResponse<Wallet>> {

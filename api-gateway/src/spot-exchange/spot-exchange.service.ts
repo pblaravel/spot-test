@@ -1,42 +1,62 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import * as ccxt from 'ccxt';
 
 @Injectable()
 export class SpotExchangeService {
   private readonly logger = new Logger(SpotExchangeService.name);
-  private readonly baseUrl = 'http://localhost:3000'; // Ваш API Gateway
+  private readonly baseUrl: string;
+  private ccxtPublic: ccxt.Exchange | null = null;
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+  ) {
+    this.baseUrl =
+      this.configService.get<string>('GATEWAY_PUBLIC_URL')?.replace(/\/$/, '') ||
+      `http://127.0.0.1:${this.configService.get<string>('PORT') || '3000'}`;
+  }
 
-  // CCXT-совместимые методы для вашей биржи
+  /** Публичные котировки с внешней биржи (реалистичные данные для демо UI). */
+  private getPublicMarketExchange(): ccxt.Exchange {
+    if (!this.ccxtPublic) {
+      const id = (this.configService.get<string>('CCXT_PUBLIC_EXCHANGE_ID') || 'binance').toLowerCase();
+      const ExchangeClass = (ccxt as any)[id] as typeof ccxt.Exchange;
+      if (!ExchangeClass) {
+        this.logger.warn(`Unknown CCXT_PUBLIC_EXCHANGE_ID=${id}, falling back to binance`);
+        this.ccxtPublic = new ccxt.binance({ enableRateLimit: true });
+      } else {
+        this.ccxtPublic = new ExchangeClass({ enableRateLimit: true });
+      }
+    }
+    return this.ccxtPublic;
+  }
 
   /**
    * Получить тикер (CCXT: fetchTicker)
    */
   async fetchTicker(symbol: string): Promise<any> {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/trading/ticker/${symbol}`)
-      );
-      
-      // Преобразуем в CCXT формат
+      const ex = this.getPublicMarketExchange();
+      const ticker = await ex.fetchTicker(symbol);
       return {
-        symbol: response.data.symbol,
-        timestamp: response.data.timestamp,
-        datetime: new Date(response.data.timestamp).toISOString(),
-        high: response.data.high,
-        low: response.data.low,
-        bid: response.data.bid,
-        ask: response.data.ask,
-        last: response.data.last,
-        close: response.data.last,
-        baseVolume: response.data.volume,
-        quoteVolume: response.data.quoteVolume,
-        percentage: response.data.percentage,
-        change: response.data.change,
-        average: response.data.average,
-        info: response.data
+        symbol: ticker.symbol,
+        timestamp: ticker.timestamp,
+        datetime: ticker.datetime,
+        high: ticker.high,
+        low: ticker.low,
+        bid: ticker.bid,
+        ask: ticker.ask,
+        last: ticker.last,
+        close: ticker.close,
+        baseVolume: ticker.baseVolume,
+        quoteVolume: ticker.quoteVolume,
+        percentage: ticker.percentage,
+        change: ticker.change,
+        average: ticker.average,
+        info: ticker.info,
       };
     } catch (error) {
       this.logger.error(`Error fetching ticker for ${symbol}:`, error.message);
@@ -49,24 +69,8 @@ export class SpotExchangeService {
    */
   async fetchOHLCV(symbol: string, timeframe: string = '1h', since?: number, limit?: number): Promise<any[]> {
     try {
-      const params = new URLSearchParams();
-      if (timeframe) params.append('timeframe', timeframe);
-      if (since) params.append('since', since.toString());
-      if (limit) params.append('limit', limit.toString());
-
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/trading/ohlcv/${symbol}?${params}`)
-      );
-
-      // Преобразуем в CCXT формат [timestamp, open, high, low, close, volume]
-      return response.data.map(candle => [
-        candle.timestamp,
-        candle.open,
-        candle.high,
-        candle.low,
-        candle.close,
-        candle.volume
-      ]);
+      const ex = this.getPublicMarketExchange();
+      return await ex.fetchOHLCV(symbol, timeframe, since, limit);
     } catch (error) {
       this.logger.error(`Error fetching OHLCV for ${symbol}:`, error.message);
       throw new BadRequestException(`Failed to fetch OHLCV: ${error.message}`);
@@ -78,20 +82,16 @@ export class SpotExchangeService {
    */
   async fetchOrderBook(symbol: string, limit?: number): Promise<any> {
     try {
-      const params = limit ? `?limit=${limit}` : '';
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/trading/orderbook/${symbol}${params}`)
-      );
-
-      // Преобразуем в CCXT формат
+      const ex = this.getPublicMarketExchange();
+      const ob = await ex.fetchOrderBook(symbol, limit);
       return {
-        symbol: response.data.symbol,
-        timestamp: response.data.timestamp,
-        datetime: new Date(response.data.timestamp).toISOString(),
-        nonce: response.data.nonce,
-        bids: response.data.bids,
-        asks: response.data.asks,
-        info: response.data
+        symbol: ob.symbol,
+        timestamp: ob.timestamp,
+        datetime: ob.datetime,
+        nonce: ob.nonce,
+        bids: ob.bids,
+        asks: ob.asks,
+        info: (ob as { info?: unknown }).info,
       };
     } catch (error) {
       this.logger.error(`Error fetching order book for ${symbol}:`, error.message);
@@ -104,21 +104,14 @@ export class SpotExchangeService {
    */
   async fetchTrades(symbol: string, since?: number, limit?: number): Promise<any[]> {
     try {
-      const params = new URLSearchParams();
-      if (since) params.append('since', since.toString());
-      if (limit) params.append('limit', limit.toString());
-
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/trading/trades/${symbol}?${params}`)
-      );
-
-      // Преобразуем в CCXT формат
-      return response.data.map(trade => ({
+      const ex = this.getPublicMarketExchange();
+      const trades = await ex.fetchTrades(symbol, since, limit);
+      return trades.map((trade) => ({
         id: trade.id,
         timestamp: trade.timestamp,
-        datetime: new Date(trade.timestamp).toISOString(),
+        datetime: trade.datetime,
         symbol: trade.symbol,
-        order: trade.orderId,
+        order: trade.order,
         type: trade.type,
         side: trade.side,
         takerOrMaker: trade.takerOrMaker,
@@ -126,7 +119,7 @@ export class SpotExchangeService {
         amount: trade.amount,
         cost: trade.cost,
         fee: trade.fee,
-        info: trade
+        info: trade.info,
       }));
     } catch (error) {
       this.logger.error(`Error fetching trades for ${symbol}:`, error.message);

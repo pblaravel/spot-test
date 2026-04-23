@@ -198,6 +198,7 @@ services:
       REDIS_URL: redis://redis:6379
       USER_SERVICE_URL: http://user-service:3001
       WALLET_SERVICE_URL: http://wallet-service:3002
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
       TRADING_ENGINE_URL: http://trading-engine:8080
       ORDER_BOOK_SERVICE_URL: http://order-book-service:8081
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
@@ -229,6 +230,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 24h
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
       KAFKA_BROKERS: kafka:9092
     depends_on:
       postgres:
@@ -257,6 +260,7 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://admin:password@postgres:5432/crypto_exchange
       REDIS_URL: redis://redis:6379
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
     depends_on:
       postgres:
         condition: service_healthy

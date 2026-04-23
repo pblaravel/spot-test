@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +34,16 @@ export default function RegisterPage() {
 
   const router = useRouter()
   const { register } = useAuth()
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const e = p.get("email")
+    const fn = p.get("firstName")
+    const ln = p.get("lastName")
+    if (e) setFormData((prev) => ({ ...prev, email: decodeURIComponent(e) }))
+    if (fn) setFormData((prev) => ({ ...prev, firstName: decodeURIComponent(fn) }))
+    if (ln) setFormData((prev) => ({ ...prev, lastName: decodeURIComponent(ln) }))
+  }, [])
 
   const calculatePasswordStrength = (password: string) => {
     let strength = 0

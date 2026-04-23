@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { of } from 'rxjs';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 // @ts-ignore
@@ -11,9 +13,15 @@ describe('UserService (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(HttpService)
+      .useValue({
+        post: jest.fn(() => of({ data: { id: 'wallet-mock', balance: 1000, currency: 'USDT' } })),
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api/v1');
     await app.init();
   });
 
@@ -24,7 +32,7 @@ describe('UserService (e2e)', () => {
   describe('/health (GET)', () => {
     it('should return health status', () => {
       return request(app.getHttpServer())
-        .get('/health')
+        .get('/api/v1/health')
         .expect(200)
         .expect((res) => {
           expect(res.body).toHaveProperty('status');
@@ -32,7 +40,7 @@ describe('UserService (e2e)', () => {
     });
   });
 
-  describe('/users/register (POST)', () => {
+  describe('/api/v1/users/auth/register (POST)', () => {
     it('should create a new user', () => {
       const createUserDto = {
         email: 'test@example.com',
@@ -42,7 +50,7 @@ describe('UserService (e2e)', () => {
       };
 
       return request(app.getHttpServer())
-        .post('/users/register')
+        .post('/api/v1/users/auth/register')
         .send(createUserDto)
         .expect(201)
         .expect((res) => {
@@ -60,13 +68,13 @@ describe('UserService (e2e)', () => {
       };
 
       return request(app.getHttpServer())
-        .post('/users/register')
+        .post('/api/v1/users/auth/register')
         .send(invalidDto)
         .expect(400);
     });
   });
 
-  describe('/users/login (POST)', () => {
+  describe('/api/v1/users/auth/login (POST)', () => {
     it('should login user with valid credentials', async () => {
       // First create a user
       const createUserDto = {
@@ -77,7 +85,7 @@ describe('UserService (e2e)', () => {
       };
 
       await request(app.getHttpServer())
-        .post('/users/register')
+        .post('/api/v1/users/auth/register')
         .send(createUserDto);
 
       // Then try to login
@@ -87,7 +95,7 @@ describe('UserService (e2e)', () => {
       };
 
       return request(app.getHttpServer())
-        .post('/users/login')
+        .post('/api/v1/users/auth/login')
         .send(loginDto)
         .expect(200)
         .expect((res) => {
@@ -104,7 +112,7 @@ describe('UserService (e2e)', () => {
       };
 
       return request(app.getHttpServer())
-        .post('/users/login')
+        .post('/api/v1/users/auth/login')
         .send(loginDto)
         .expect(400);
     });

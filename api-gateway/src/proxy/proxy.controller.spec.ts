@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Request, Response } from 'express';
 import { ProxyController } from './proxy.controller';
 import { ProxyService } from './proxy.service';
+import { JwtService } from '@nestjs/jwt';
 import { HttpStatus } from '@nestjs/common';
 
 describe('ProxyController', () => {
@@ -15,6 +16,10 @@ describe('ProxyController', () => {
     proxyToNotificationService: jest.fn(),
     proxyToAnalyticsService: jest.fn(),
     proxyToMarketMakerService: jest.fn(),
+  };
+
+  const mockJwtService = {
+    verify: jest.fn(),
   };
 
   const mockRequest = {
@@ -41,6 +46,10 @@ describe('ProxyController', () => {
           provide: ProxyService,
           useValue: mockProxyService,
         },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
       ],
     }).compile();
 
@@ -50,6 +59,7 @@ describe('ProxyController', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockJwtService.verify.mockReset();
   });
 
   it('should be defined', () => {
@@ -65,7 +75,7 @@ describe('ProxyController', () => {
 
       expect(proxyService.proxyToUserService).toHaveBeenCalledWith(
         'get',
-        '/profile',
+        '/api/v1/users/profile',
         undefined,
         {
           authorization: 'Bearer test-token',

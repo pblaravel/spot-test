@@ -7,7 +7,7 @@ export enum WalletStatus {
   CLOSED = 'closed'
 }
 
-@Entity('wallets')
+@Entity({ name: 'wallets', schema: 'wallets' })
 export class Wallet {
   @PrimaryGeneratedColumn('uuid')
   id: string;

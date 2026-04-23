@@ -17,7 +17,7 @@ export enum TransactionStatus {
   CANCELLED = 'cancelled'
 }
 
-@Entity('transactions')
+@Entity({ name: 'transactions', schema: 'wallets' })
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
