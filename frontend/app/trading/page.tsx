@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { ArrowUpRight, ArrowDownRight, Volume2, Clock, DollarSign, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { apiClient, SpotOrderBook, SpotTicker, SpotTrade, Wallet } from "@/lib/api-client"
 
 const TRADING_PAIR = "BTC/USDT"
@@ -51,6 +52,7 @@ export default function TradingPage() {
   const [walletError, setWalletError] = useState<string | null>(null)
   const [loadingMarket, setLoadingMarket] = useState(true)
   const [loadingWallet, setLoadingWallet] = useState(true)
+  const [orderSubmitting, setOrderSubmitting] = useState(false)
 
   const loadMarket = useCallback(async () => {
     setLoadingMarket(true)
@@ -102,6 +104,12 @@ export default function TradingPage() {
     void loadWallet()
   }, [loadWallet])
 
+  useEffect(() => {
+    if (orderMode === "limit" && !price.trim() && ticker?.last !== undefined) {
+      setPrice(String(ticker.last))
+    }
+  }, [orderMode, ticker?.last, price])
+
   const lastPrice = ticker?.last
   const limitPriceNum = Number.parseFloat(price.replace(/\s/g, "").replace(",", "."))
   const amountNum = Number.parseFloat(amount.replace(/\s/g, "").replace(",", "."))
@@ -114,6 +122,46 @@ export default function TradingPage() {
 
   const bidRows = useMemo(() => (orderBook?.bids ?? []).slice(0, 6), [orderBook])
   const askRows = useMemo(() => (orderBook?.asks ?? []).slice(0, 6).reverse(), [orderBook])
+
+  const placeOrder = async (side: "buy" | "sell") => {
+    if (!usdtWallet) {
+      toast.error("Войдите в аккаунт, чтобы выставить ордер")
+      return
+    }
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      toast.error("Укажите количество BTC больше нуля")
+      return
+    }
+    const type = orderMode === "market" ? "market" : "limit"
+    const limitPx =
+      orderMode === "limit"
+        ? (Number.isFinite(limitPriceNum) && limitPriceNum > 0 ? limitPriceNum : lastPrice)
+        : undefined
+    if (type === "limit" && (limitPx === undefined || !Number.isFinite(limitPx) || limitPx <= 0)) {
+      toast.error("Укажите цену лимитного ордера")
+      return
+    }
+    setOrderSubmitting(true)
+    try {
+      const res = await apiClient.createSpotOrder({
+        symbol: TRADING_PAIR,
+        type,
+        side,
+        amount: amountNum,
+        price: type === "limit" ? limitPx : undefined,
+      })
+      if (res.error || !res.data) {
+        toast.error(res.error || "Не удалось создать ордер")
+        return
+      }
+      const id = String((res.data as { id?: string }).id ?? "")
+      toast.success(side === "buy" ? "Ордер на покупку отправлен" : "Ордер на продажу отправлен", {
+        description: id ? `ID: ${id}` : undefined,
+      })
+    } finally {
+      setOrderSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -284,7 +332,7 @@ export default function TradingPage() {
               <CardHeader>
                 <CardTitle>Торговая панель</CardTitle>
                 <p className="text-xs text-gray-500">
-                  Котировки и стакан — с публичного рынка (CCXT). Исполнение ордеров на движке пока не подключено.
+                  Котировки и стакан — с публичного рынка. Ордер уходит на API биржи (демо-режим без полного matching).
                 </p>
               </CardHeader>
               <CardContent>
@@ -344,8 +392,20 @@ export default function TradingPage() {
                             {Number.isFinite(estimatedCost) ? formatUsdt(estimatedCost + estimatedFee) : "—"}
                           </span>
                         </div>
-                        <Button className="w-full bg-green-600 hover:bg-green-700 text-white" type="button" disabled>
-                          Купить BTC (демо)
+                        <Button
+                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                          type="button"
+                          disabled={orderSubmitting || !usdtWallet}
+                          onClick={() => void placeOrder("buy")}
+                        >
+                          {orderSubmitting ? (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Отправка…
+                            </span>
+                          ) : (
+                            "Купить BTC"
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -397,8 +457,20 @@ export default function TradingPage() {
                             {Number.isFinite(estimatedCost) ? formatUsdt(estimatedCost - estimatedFee) : "—"}
                           </span>
                         </div>
-                        <Button className="w-full bg-red-600 hover:bg-red-700 text-white" type="button" disabled>
-                          Продать BTC (демо)
+                        <Button
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          type="button"
+                          disabled={orderSubmitting || !usdtWallet}
+                          onClick={() => void placeOrder("sell")}
+                        >
+                          {orderSubmitting ? (
+                            <span className="inline-flex items-center justify-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Отправка…
+                            </span>
+                          ) : (
+                            "Продать BTC"
+                          )}
                         </Button>
                       </div>
                     </div>

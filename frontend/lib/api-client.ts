@@ -211,6 +211,20 @@ class ApiClient {
     return this.request(`/spot/trades/${encoded}?limit=${limit}`);
   }
 
+  /** CCXT-совместимый ответ (как у gateway POST /spot/order) */
+  async createSpotOrder(body: {
+    symbol: string;
+    type: 'market' | 'limit';
+    side: 'buy' | 'sell';
+    amount: number;
+    price?: number;
+  }): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.request('/spot/order', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   async getWallet(walletId: string): Promise<ApiResponse<Wallet>> {
     return this.request(`/api/wallet/wallets/${walletId}`);
   }

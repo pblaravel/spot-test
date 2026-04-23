@@ -97,6 +97,7 @@ function sendJson(res, status, body, cors = true) {
 }
 
 const users = new Map();
+let orderSeq = 1;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${PORT}`);
@@ -119,6 +120,53 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname.startsWith('/spot/trades/')) {
     return sendJson(res, 200, snapshot.trades || []);
+  }
+
+  if (req.method === 'POST' && (url.pathname === '/spot/order' || url.pathname === '/spot/order/')) {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!users.has(token)) {
+      return sendJson(res, 401, { message: 'Unauthorized' });
+    }
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    let body;
+    try {
+      body = JSON.parse(raw || '{}');
+    } catch {
+      return sendJson(res, 400, { message: 'Invalid JSON' });
+    }
+    const { symbol, type, side, amount, price } = body;
+    if (!symbol || !type || !side || typeof amount !== 'number') {
+      return sendJson(res, 400, { message: 'symbol, type, side, amount required' });
+    }
+    const now = Date.now();
+    const id = `demo-${orderSeq++}`;
+    const px =
+      type === 'market' && snapshot.ticker?.last
+        ? Number(snapshot.ticker.last)
+        : Number(price) || Number(snapshot.ticker?.last) || 0;
+    return sendJson(res, 201, {
+      id,
+      clientOrderId: id,
+      datetime: new Date(now).toISOString(),
+      timestamp: now,
+      lastTradeTimestamp: null,
+      status: 'open',
+      symbol,
+      type,
+      timeInForce: type === 'limit' ? 'GTC' : undefined,
+      side,
+      price: px,
+      stopPrice: null,
+      amount,
+      filled: 0,
+      remaining: amount,
+      cost: 0,
+      trades: [],
+      fee: { cost: 0, currency: 'USDT' },
+      info: { demo: true, venue: 'OKX snapshot price' },
+    });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/wallet/me/usdt') {
