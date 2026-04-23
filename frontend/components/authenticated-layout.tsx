@@ -15,11 +15,11 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
 
-  // Проверяем, находимся ли мы на странице для авторизованных пользователей
+  // Проверяем, находимся ли мы на странице для авторизованных пользователей.
+  // Страница торговли выводится во всю ширину без левого меню.
   const isAuthenticatedPage = [
     "/dashboard",
     "/portfolio",
-    "/trading",
     "/transactions",
     "/buy",
     "/sell",

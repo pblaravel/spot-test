@@ -316,19 +316,133 @@ func createOrder(c *gin.Context) {
 		Timestamp: time.Now().UTC(),
 	}
 
-	// Добавляем ордер в стакан
-	addOrderToBook(order)
+	// Матчим входящий ордер против противоположной стороны стакана.
+	// Остаток лимитного ордера попадает в книгу; маркет-ордер не добавляется.
+	remaining, status := matchOrder(&order)
 
-	// Сохраняем в Redis
+	// Сохраняем в Redis (для наблюдения)
 	saveOrderToRedis(order)
 
-	appendTrade(order)
+	msg := "Order created successfully"
+	if status == "filled" {
+		msg = "Order fully matched"
+	} else if status == "partial" {
+		msg = "Order partially matched"
+	}
+	_ = remaining
 
 	c.JSON(http.StatusOK, CreateOrderResponse{
 		OrderID: order.ID,
-		Status:  "created",
-		Message: "Order created successfully",
+		Status:  status,
+		Message: msg,
 	})
+}
+
+// matchOrder выполняет простой матчинг входящего ордера против противоположной
+// стороны стакана. Возвращает оставшееся (нематченное) количество и статус:
+// "filled" — полностью исполнен, "partial" — частично исполнен, "open" — полностью в книгу.
+func matchOrder(incoming *Order) (decimal.Decimal, string) {
+	orderBooksMutex.Lock()
+	book, exists := orderBooks[incoming.Symbol]
+	if !exists {
+		book = &OrderBook{Symbol: incoming.Symbol}
+		orderBooks[incoming.Symbol] = book
+	}
+	orderBooksMutex.Unlock()
+
+	book.Mutex.Lock()
+	defer book.Mutex.Unlock()
+
+	remaining := incoming.Quantity
+	anyMatched := false
+
+	for remaining.GreaterThan(decimal.Zero) {
+		var opposite *[]Order
+		var isBuy bool
+		if incoming.Side == "buy" {
+			opposite = &book.Asks
+			isBuy = true
+		} else {
+			opposite = &book.Bids
+			isBuy = false
+		}
+		if len(*opposite) == 0 {
+			break
+		}
+		top := (*opposite)[0]
+
+		if incoming.Type == "limit" {
+			if isBuy && top.Price.GreaterThan(incoming.Price) {
+				break
+			}
+			if !isBuy && top.Price.LessThan(incoming.Price) {
+				break
+			}
+		}
+
+		tradeQty := decimal.Min(remaining, top.Quantity)
+		tradePx := top.Price
+		recordTrade(incoming.Symbol, incoming.Side, tradePx, tradeQty, incoming.Timestamp)
+
+		top.Quantity = top.Quantity.Sub(tradeQty)
+		remaining = remaining.Sub(tradeQty)
+		anyMatched = true
+
+		if top.Quantity.LessThanOrEqual(decimal.Zero) {
+			*opposite = (*opposite)[1:]
+		} else {
+			(*opposite)[0] = top
+		}
+	}
+
+	status := "open"
+	if remaining.LessThanOrEqual(decimal.Zero) {
+		status = "filled"
+	} else if anyMatched {
+		status = "partial"
+	}
+
+	if incoming.Type == "limit" && remaining.GreaterThan(decimal.Zero) {
+		rest := *incoming
+		rest.Quantity = remaining
+		if incoming.Side == "buy" {
+			book.Bids = append(book.Bids, rest)
+			sort.Slice(book.Bids, func(i, j int) bool {
+				return book.Bids[i].Price.GreaterThan(book.Bids[j].Price)
+			})
+		} else {
+			book.Asks = append(book.Asks, rest)
+			sort.Slice(book.Asks, func(i, j int) bool {
+				return book.Asks[i].Price.LessThan(book.Asks[j].Price)
+			})
+		}
+	}
+
+	return remaining, status
+}
+
+// recordTrade добавляет запись в ленту сделок по символу.
+func recordTrade(symbol, takerSide string, price, qty decimal.Decimal, ts time.Time) {
+	if symbol == "" || qty.LessThanOrEqual(decimal.Zero) {
+		return
+	}
+	t := MarketTrade{
+		ID:        uuid.New().String(),
+		Symbol:    symbol,
+		Side:      takerSide,
+		Price:     price,
+		Quantity:  qty,
+		Quote:     qty.Mul(price),
+		Timestamp: ts,
+	}
+	tradesMutex.Lock()
+	defer tradesMutex.Unlock()
+	sl := tradesBySymbol[symbol]
+	sl = append([]MarketTrade{t}, sl...)
+	if len(sl) > maxTradesPerSymbol {
+		sl = sl[:maxTradesPerSymbol]
+	}
+	tradesBySymbol[symbol] = sl
 }
 
 func getOrderBook(c *gin.Context) {
@@ -351,30 +465,6 @@ func getOrderBook(c *gin.Context) {
 
 	snapshot := orderBook.GetSnapshot()
 	c.JSON(http.StatusOK, snapshot)
-}
-
-func appendTrade(order Order) {
-	if order.Symbol == "" {
-		return
-	}
-	quote := order.Quantity.Mul(order.Price)
-	t := MarketTrade{
-		ID:        order.ID,
-		Symbol:    order.Symbol,
-		Side:      order.Side,
-		Price:     order.Price,
-		Quantity:  order.Quantity,
-		Quote:     quote,
-		Timestamp: order.Timestamp,
-	}
-	tradesMutex.Lock()
-	defer tradesMutex.Unlock()
-	sl := tradesBySymbol[order.Symbol]
-	sl = append([]MarketTrade{t}, sl...)
-	if len(sl) > maxTradesPerSymbol {
-		sl = sl[:maxTradesPerSymbol]
-	}
-	tradesBySymbol[order.Symbol] = sl
 }
 
 func getRecentTrades(c *gin.Context) {
@@ -412,44 +502,6 @@ func listOrders(c *gin.Context) {
 		"message": "List orders endpoint",
 		"status":  "not implemented",
 	})
-}
-
-// addOrderToBook добавляет ордер в соответствующий стакан
-func addOrderToBook(order Order) {
-	orderBooksMutex.Lock()
-	defer orderBooksMutex.Unlock()
-
-	orderBook, exists := orderBooks[order.Symbol]
-	if !exists {
-		orderBook = &OrderBook{
-			Symbol: order.Symbol,
-			Bids:   make([]Order, 0),
-			Asks:   make([]Order, 0),
-		}
-		orderBooks[order.Symbol] = orderBook
-	}
-
-	orderBook.AddOrder(order)
-}
-
-// AddOrder добавляет ордер в стакан
-func (ob *OrderBook) AddOrder(order Order) {
-	ob.Mutex.Lock()
-	defer ob.Mutex.Unlock()
-
-	if order.Side == "buy" {
-		ob.Bids = append(ob.Bids, order)
-		// Сортируем по убыванию цены (лучшие цены сверху)
-		sort.Slice(ob.Bids, func(i, j int) bool {
-			return ob.Bids[i].Price.GreaterThan(ob.Bids[j].Price)
-		})
-	} else {
-		ob.Asks = append(ob.Asks, order)
-		// Сортируем по возрастанию цены (лучшие цены сверху)
-		sort.Slice(ob.Asks, func(i, j int) bool {
-			return ob.Asks[i].Price.LessThan(ob.Asks[j].Price)
-		})
-	}
 }
 
 // GetSnapshot возвращает снимок стакана

@@ -18,7 +18,6 @@ export function Navigation() {
     [
       "/dashboard",
       "/portfolio",
-      "/trading",
       "/transactions",
       "/buy",
       "/sell",
