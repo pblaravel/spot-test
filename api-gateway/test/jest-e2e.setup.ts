@@ -9,6 +9,7 @@ process.env.WALLET_SERVICE_URL = 'http://localhost:3003';
 process.env.NOTIFICATION_SERVICE_URL = 'http://localhost:3004';
 process.env.ANALYTICS_SERVICE_URL = 'http://localhost:3005';
 process.env.MARKET_MAKER_SERVICE_URL = 'http://localhost:3006';
+process.env.ORDER_BOOK_SERVICE_URL = 'http://localhost:8081';
 
 // Increase timeout for e2e tests
 jest.setTimeout(30000);

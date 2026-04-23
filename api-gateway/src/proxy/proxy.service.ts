@@ -10,6 +10,7 @@ export class ProxyService {
   private readonly notificationServiceClient: AxiosInstance;
   private readonly analyticsServiceClient: AxiosInstance;
   private readonly marketMakerServiceClient: AxiosInstance;
+  private readonly orderBookServiceClient: AxiosInstance;
 
   constructor(private configService: ConfigService) {
     // Инициализация HTTP клиентов для каждого микросервиса
@@ -41,6 +42,11 @@ export class ProxyService {
 
     this.marketMakerServiceClient = axios.create({
       baseURL: this.configService.get('MARKET_MAKER_SERVICE_URL'),
+      timeout: 5000,
+    });
+
+    this.orderBookServiceClient = axios.create({
+      baseURL: this.configService.get('ORDER_BOOK_SERVICE_URL'),
       timeout: 5000,
     });
   }
@@ -132,6 +138,20 @@ export class ProxyService {
       return response.data;
     } catch (error) {
       throw this.handleError(error, 'Market Maker Service');
+    }
+  }
+
+  async proxyToOrderBookService(method: string, path: string, data?: any, headers?: any) {
+    try {
+      const response = await this.orderBookServiceClient.request({
+        method,
+        url: path,
+        data,
+        headers,
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Order Book Service');
     }
   }
 

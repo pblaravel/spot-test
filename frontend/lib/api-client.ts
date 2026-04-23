@@ -33,32 +33,33 @@ export interface Wallet {
   updatedAt: string;
 }
 
-/** Публичные данные стакана (CCXT-совместимый ответ gateway /spot) */
-export interface SpotOrderBook {
-  symbol: string;
-  timestamp: number;
-  bids: [number, number][];
-  asks: [number, number][];
+/** Уровень стакана из order-book-service (агрегированный) */
+export interface ExchangeOrderBookEntry {
+  price: string;
+  quantity: string;
+  count: number;
 }
 
-export interface SpotTicker {
+export interface ExchangeOrderBookSnapshot {
   symbol: string;
-  last: number;
-  high?: number;
-  low?: number;
-  percentage?: number;
-  change?: number;
-  baseVolume?: number;
-  quoteVolume?: number;
+  timestamp: string;
+  bids: ExchangeOrderBookEntry[];
+  asks: ExchangeOrderBookEntry[];
 }
 
-export interface SpotTrade {
+export interface ExchangeTrade {
   id: string;
-  timestamp: number;
-  datetime: string;
-  side: 'buy' | 'sell';
-  price: number;
-  amount: number;
+  symbol: string;
+  side: string;
+  price: string;
+  quantity: string;
+  quote: string;
+  timestamp: string;
+}
+
+export interface ExchangeTradesResponse {
+  symbol: string;
+  trades: ExchangeTrade[];
 }
 
 export interface Transaction {
@@ -196,30 +197,26 @@ class ApiClient {
     return this.request('/api/wallet/me/usdt');
   }
 
-  async getSpotTicker(symbol: string): Promise<ApiResponse<SpotTicker>> {
-    const encoded = encodeURIComponent(symbol);
-    return this.request(`/spot/ticker/${encoded}`);
+  /** Стакан с биржевого движка (order-book-service через gateway) */
+  async getExchangeOrderBook(symbol: string): Promise<ApiResponse<ExchangeOrderBookSnapshot>> {
+    const sym = encodeURIComponent(symbol.toUpperCase());
+    return this.request(`/api/exchange/order-book/orderbook/${sym}`);
   }
 
-  async getSpotOrderBook(symbol: string, limit = 12): Promise<ApiResponse<SpotOrderBook>> {
-    const encoded = encodeURIComponent(symbol);
-    return this.request(`/spot/orderbook/${encoded}?limit=${limit}`);
+  async getExchangeTrades(symbol: string): Promise<ApiResponse<ExchangeTradesResponse>> {
+    const sym = encodeURIComponent(symbol.toUpperCase());
+    return this.request(`/api/exchange/order-book/trades/${sym}`);
   }
 
-  async getSpotTrades(symbol: string, limit = 8): Promise<ApiResponse<SpotTrade[]>> {
-    const encoded = encodeURIComponent(symbol);
-    return this.request(`/spot/trades/${encoded}?limit=${limit}`);
-  }
-
-  /** CCXT-совместимый ответ (как у gateway POST /spot/order) */
-  async createSpotOrder(body: {
+  /** Лимитная заявка в стакан (quantity и price — строки для decimal) */
+  async createExchangeOrder(body: {
     symbol: string;
-    type: 'market' | 'limit';
     side: 'buy' | 'sell';
-    amount: number;
-    price?: number;
-  }): Promise<ApiResponse<Record<string, unknown>>> {
-    return this.request('/spot/order', {
+    type: 'limit' | 'market';
+    quantity: string;
+    price?: string;
+  }): Promise<ApiResponse<{ order_id: string; status: string; message: string }>> {
+    return this.request('/api/exchange/order-book/orders', {
       method: 'POST',
       body: JSON.stringify(body),
     });

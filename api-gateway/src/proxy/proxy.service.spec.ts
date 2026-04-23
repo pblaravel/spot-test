@@ -15,6 +15,7 @@ describe('ProxyService', () => {
         NOTIFICATION_SERVICE_URL: 'http://notification-service:3004',
         ANALYTICS_SERVICE_URL: 'http://analytics-service:3005',
         MARKET_MAKER_SERVICE_URL: 'http://market-maker-service:3006',
+        ORDER_BOOK_SERVICE_URL: 'http://order-book-service:8081',
       };
       return config[key];
     }),

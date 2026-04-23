@@ -138,6 +138,23 @@ export class ProxyController {
     }
   }
 
+  /** Прямой доступ к order-book-service (стакан и сделки по паре) */
+  @All('exchange/order-book/*')
+  async proxyToOrderBookService(@Req() req: Request, @Res() res: Response) {
+    try {
+      const path = req.url.replace('/api/exchange/order-book', '/api/v1');
+      const method = req.method.toLowerCase();
+      const data = method === 'get' ? undefined : req.body;
+      const headers = this.extractHeaders(req);
+
+      const result = await this.proxyService.proxyToOrderBookService(method, path, data, headers);
+
+      res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
   private extractHeaders(req: Request): any {
     const headers: any = {};
     
