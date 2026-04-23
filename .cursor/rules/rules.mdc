@@ -1,0 +1,14 @@
+---
+alwaysApply: false
+---
+API Gateway - nestjs
+User Service - nestjs
+Trading Engine - go
+Order Book Service - go
+Wallet Service -nestjs
+Bot Service - пока не делаем
+Notification Service - nestjs
+Analytics Service - nestjs
+Market Maker Service - NestJS
+
+Broken use kafka

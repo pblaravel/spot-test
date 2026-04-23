@@ -1,0 +1,136 @@
+[project]
+name = "spot"
+
+[plugins.postgres]
+type = "postgres"
+name = "main-db"
+
+[plugins.redis]
+type = "redis"
+name = "main-redis"
+
+[plugins.kafka]
+type = "kafka"
+name = "main-kafka"
+
+[plugins.influxdb]
+type = "influxdb"
+name = "main-influxdb"
+
+[services.api-gateway]
+path = "api-gateway"
+builder = "nixpacks"
+healthcheckPath = "/health"
+env = {
+  PORT = "3000",
+  NODE_ENV = "production",
+  ALLOWED_ORIGINS = "https://your-frontend.up.railway.app",
+  USER_SERVICE_URL = "http://user-service:3001",
+  TRADING_ENGINE_URL = "http://trading-engine:8080",
+  WALLET_SERVICE_URL = "http://wallet-service:3002",
+  NOTIFICATION_SERVICE_URL = "http://notification-service:3005",
+  ANALYTICS_SERVICE_URL = "http://analytics-service:3006",
+  MARKET_MAKER_SERVICE_URL = "http://market-maker-service:3007",
+  DATABASE_URL = "${{plugins.postgres.connectionString}}",
+  REDIS_URL = "${{plugins.redis.connectionString}}",
+  JWT_SECRET = "your-super-secret-jwt-key",
+  JWT_EXPIRES_IN = "24h"
+}
+
+[services.user-service]
+path = "user-service"
+builder = "nixpacks"
+healthcheckPath = "/health"
+env = {
+  PORT = "3001",
+  NODE_ENV = "production",
+  DATABASE_URL = "${{plugins.postgres.connectionString}}",
+  REDIS_URL = "${{plugins.redis.connectionString}}",
+  KAFKA_BROKERS = "${{plugins.kafka.brokers}}",
+  JWT_SECRET = "your-super-secret-jwt-key",
+  JWT_EXPIRES_IN = "24h"
+}
+
+[services.wallet-service]
+path = "wallet-service"
+builder = "nixpacks"
+healthcheckPath = "/health"
+env = {
+  PORT = "3002",
+  NODE_ENV = "production",
+  DATABASE_URL = "${{plugins.postgres.connectionString}}",
+  REDIS_URL = "${{plugins.redis.connectionString}}"
+}
+
+[services.trading-engine]
+path = "trading-engine"
+builder = "nixpacks"
+healthcheckPath = "/health"
+env = {
+  PORT = "8080",
+  REDIS_URL = "${{plugins.redis.connectionString}}",
+  ORDER_BOOK_URL = "http://order-book-service:8081",
+  WALLET_SERVICE_URL = "http://wallet-service:3002"
+}
+
+[services.order-book-service]
+path = "order-book-service"
+builder = "nixpacks"
+healthcheckPath = "/health"
+env = {
+  PORT = "8081",
+  REDIS_URL = "${{plugins.redis.connectionString}}"
+}
+
+[services.notification-service]
+path = "notification-service"
+builder = "nixpacks"
+env = {
+  PORT = "3005"
+}
+
+[services.analytics-service]
+path = "analytics-service"
+builder = "nixpacks"
+env = {
+  PORT = "3006"
+}
+
+[services.market-maker-service]
+path = "market-maker-service"
+builder = "nixpacks"
+env = {
+  PORT = "3007"
+}
+
+[services.frontend]
+path = "frontend"
+builder = "nixpacks"
+env = {
+  PORT = "3000",
+  HOSTNAME = "0.0.0.0",
+  NODE_ENV = "production",
+  NEXT_PUBLIC_API_URL = "https://api-gateway.up.railway.app"
+}
+
+[services.kafka-ui]
+image = "provectuslabs/kafka-ui:latest"
+healthcheckPath = "/"
+env = {
+  KAFKA_CLUSTERS_0_NAME = "main",
+  KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS = "${{plugins.kafka.brokers}}",
+  KAFKA_CLUSTERS_0_ZOOKEEPER = "${{plugins.kafka.zookeeper}}"
+}
+
+[services.grafana]
+image = "grafana/grafana:latest"
+healthcheckPath = "/api/health"
+env = {
+  GF_SECURITY_ADMIN_USER = "admin",
+  GF_SECURITY_ADMIN_PASSWORD = "admin"
+}
+
+[services.prometheus]
+image = "prom/prometheus:latest"
+healthcheckPath = "/-/healthy"
+files = ["monitoring/prometheus.yml:/etc/prometheus/prometheus.yml"] 
