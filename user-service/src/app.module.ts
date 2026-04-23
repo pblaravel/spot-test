@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import { HttpModule } from '@nestjs/axios';
 import { UsersController } from './users/users.controller';
 import { UsersService } from './users/users.service';
 import { AuthService } from './auth/auth.service';
@@ -18,10 +19,15 @@ import { TerminusModule } from '@nestjs/terminus';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
+      schema: 'users',
       entities: [User],
       synchronize: process.env.NODE_ENV === 'development',
     }),
     TypeOrmModule.forFeature([User]),
+    HttpModule.register({
+      timeout: 8000,
+      maxRedirects: 3,
+    }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
       signOptions: { expiresIn: '1h' },

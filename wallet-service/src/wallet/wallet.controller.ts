@@ -21,7 +21,10 @@ export class WalletController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createWallet(@Body() createWalletDto: CreateWalletDto) {
-    return this.walletService.createWallet(createWalletDto);
+    return this.walletService.createWallet({
+      userId: createWalletDto.userId,
+      currency: createWalletDto.currency,
+    });
   }
 
   // Получение всех кошельков пользователя

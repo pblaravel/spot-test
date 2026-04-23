@@ -1,294 +1,517 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Volume2, Clock, DollarSign } from "lucide-react"
+import { Loader2 } from "lucide-react"
+import { toast } from "sonner"
+import Link from "next/link"
+import {
+  apiClient,
+  ExchangeOrderBookEntry,
+  ExchangeOrderBookSnapshot,
+  ExchangeTrade,
+  Wallet,
+} from "@/lib/api-client"
+
+const PAIR_DISPLAY = "BTC/USDT"
+const ORDER_BOOK_SYMBOL = "BTCUSDT"
+const FEE_RATE = 0.001
+
+const ACCENT = "#4A80F0"
+const BUY = "#22AD8F"
+const SELL = "#F04A4A"
+
+function parseDec(s: string): number {
+  const n = Number.parseFloat(String(s).replace(/\s/g, "").replace(",", "."))
+  return Number.isFinite(n) ? n : NaN
+}
+
+function fmtNum(n: number, maxFrac = 8): string {
+  if (!Number.isFinite(n)) return "—"
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxFrac,
+  }).format(n)
+}
+
+function fmtMoney(n: number): string {
+  if (!Number.isFinite(n)) return "—"
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(n)
+}
 
 export default function TradingPage() {
-  const [orderType, setOrderType] = useState("buy")
-  const [amount, setAmount] = useState("")
-  const [price, setPrice] = useState("")
+  const [snapshot, setSnapshot] = useState<ExchangeOrderBookSnapshot | null>(null)
+  const [trades, setTrades] = useState<ExchangeTrade[]>([])
+  const [usdtWallet, setUsdtWallet] = useState<Wallet | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [orderMode, setOrderMode] = useState<"limit" | "market">("limit")
+  const [buyPrice, setBuyPrice] = useState("")
+  const [buyAmount, setBuyAmount] = useState("")
+  const [sellPrice, setSellPrice] = useState("")
+  const [sellAmount, setSellAmount] = useState("")
+  const [submitting, setSubmitting] = useState<"buy" | "sell" | null>(null)
+
+  const loadBook = useCallback(async () => {
+    const res = await apiClient.getExchangeOrderBook(ORDER_BOOK_SYMBOL)
+    if (res.error || !res.data) {
+      setLoadErr(res.error || "Стакан недоступен")
+      setSnapshot(null)
+    } else {
+      setLoadErr(null)
+      setSnapshot(res.data)
+    }
+    setLoading(false)
+  }, [])
+
+  const loadTrades = useCallback(async () => {
+    const res = await apiClient.getExchangeTrades(ORDER_BOOK_SYMBOL)
+    if (res.data?.trades) setTrades(res.data.trades)
+  }, [])
+
+  const loadWallet = useCallback(async () => {
+    const w = await apiClient.getMyUsdtWallet()
+    if (w.data) setUsdtWallet(w.data)
+    else setUsdtWallet(null)
+  }, [])
+
+  useEffect(() => {
+    void loadBook()
+    void loadTrades()
+    void loadWallet()
+    const t = setInterval(() => {
+      void loadBook()
+      void loadTrades()
+    }, 2000)
+    return () => clearInterval(t)
+  }, [loadBook, loadTrades, loadWallet])
+
+  const bestBid = snapshot?.bids?.[0]
+  const bestAsk = snapshot?.asks?.[0]
+  const mid =
+    bestBid && bestAsk
+      ? (parseDec(bestBid.price) + parseDec(bestAsk.price)) / 2
+      : bestBid
+        ? parseDec(bestBid.price)
+        : bestAsk
+          ? parseDec(bestAsk.price)
+          : NaN
+
+  useEffect(() => {
+    if (!Number.isFinite(mid)) return
+    setBuyPrice((p) => (p.trim() ? p : String(mid)))
+    setSellPrice((p) => (p.trim() ? p : String(mid)))
+  }, [mid])
+
+  const asksDisplay = useMemo(() => {
+    const rows = snapshot?.asks ?? []
+    return [...rows].sort((a, b) => parseDec(a.price) - parseDec(b.price)).slice(0, 14)
+  }, [snapshot])
+
+  const bidsDisplay = useMemo(() => {
+    const rows = snapshot?.bids ?? []
+    return [...rows].sort((a, b) => parseDec(b.price) - parseDec(a.price)).slice(0, 14)
+  }, [snapshot])
+
+  const volBase = useMemo(() => {
+    let s = 0
+    for (const r of asksDisplay) s += parseDec(r.quantity)
+    for (const r of bidsDisplay) s += parseDec(r.quantity)
+    return s
+  }, [asksDisplay, bidsDisplay])
+
+  const volQuote = useMemo(() => {
+    let s = 0
+    for (const r of asksDisplay) s += parseDec(r.quantity) * parseDec(r.price)
+    for (const r of bidsDisplay) s += parseDec(r.quantity) * parseDec(r.price)
+    return s
+  }, [asksDisplay, bidsDisplay])
+
+  const spreadPct =
+    bestBid && bestAsk && parseDec(bestBid.price) > 0
+      ? ((parseDec(bestAsk.price) - parseDec(bestBid.price)) / parseDec(bestBid.price)) * 100
+      : 0
+
+  const place = async (side: "buy" | "sell") => {
+    const priceStr = side === "buy" ? buyPrice : sellPrice
+    const amtStr = side === "buy" ? buyAmount : sellAmount
+    const qty = parseDec(amtStr)
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error("Укажите объём BTC")
+      return
+    }
+    if (orderMode === "limit") {
+      const px = parseDec(priceStr)
+      if (!Number.isFinite(px) || px <= 0) {
+        toast.error("Укажите цену")
+        return
+      }
+    }
+    if (!usdtWallet) {
+      toast.error("Войдите в аккаунт для размещения заявки")
+      return
+    }
+
+    setSubmitting(side)
+    try {
+      const px = parseDec(priceStr)
+      const res = await apiClient.createExchangeOrder({
+        symbol: ORDER_BOOK_SYMBOL,
+        side,
+        type: orderMode,
+        quantity: amtStr.trim().replace(",", "."),
+        price: orderMode === "limit" ? String(px) : undefined,
+      })
+      if (res.error || !res.data) {
+        toast.error(res.error || "Ошибка")
+        return
+      }
+      toast.success(side === "buy" ? "Заявка на покупку отправлена" : "Заявка на продажу отправлена", {
+        description: `ID: ${res.data.order_id}`,
+      })
+      void loadBook()
+      void loadTrades()
+    } finally {
+      setSubmitting(null)
+    }
+  }
+
+  const pctClass = spreadPct >= 0 ? "text-emerald-600" : "text-rose-600"
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">Торговля</h1>
-            <div className="flex items-center space-x-4">
-              <Badge className="bg-green-50 text-green-700 border-green-200">Баланс: ₽125,430.50</Badge>
-              <Button variant="outline" size="sm">
-                Пополнить
-              </Button>
+    <div className="min-h-screen bg-[#f4f6fa] text-slate-900">
+      {/* Верхняя панель пары */}
+      <header className="border-b border-slate-200/80 bg-white shadow-sm">
+        <div className="container mx-auto px-4 py-3 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="text-sm text-slate-500 font-medium">{PAIR_DISPLAY}</div>
+            <div className="text-3xl font-semibold tabular-nums" style={{ color: BUY }}>
+              {Number.isFinite(mid) ? fmtMoney(mid) : "—"}{" "}
+              <span className="text-lg font-normal text-slate-500">USDT</span>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <Stat label="Спред" value={`${fmtNum(spreadPct, 3)}%`} valueClass={pctClass} />
+            <Stat label="Объём стакана (BTC)" value={fmtNum(volBase, 8)} />
+            <Stat label="Оборот стакана (USDT)" value={fmtMoney(volQuote)} />
+            {usdtWallet && (
+              <Stat label="Баланс USDT" value={fmtMoney(Number(usdtWallet.balance))} valueClass="text-slate-800" />
+            )}
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Trading Chart Area */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Current Price */}
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                      <span className="text-xl font-bold text-gray-700">₿</span>
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900">Bitcoin (BTC)</h2>
-                      <p className="text-gray-500">BTC/RUB</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-gray-900">₽3,250,000</div>
-                    <div className="flex items-center text-green-600">
-                      <ArrowUpRight className="w-4 h-4 mr-1" />
-                      <span className="font-medium">+2.45% (+77,500)</span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-
-            {/* Chart Placeholder */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>График цены</CardTitle>
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm">
-                      1Ч
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      4Ч
-                    </Button>
-                    <Button variant="outline" size="sm" className="bg-black text-white">
-                      1Д
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      1Н
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      1М
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center">
-                    <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">График торговли</p>
-                    <p className="text-sm text-gray-400">Здесь будет отображаться интерактивный график цены</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Market Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Volume2 className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-500">24ч Объем</span>
-                  </div>
-                  <div className="text-xl font-bold text-gray-900">₽2.1B</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <ArrowUpRight className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-500">24ч Максимум</span>
-                  </div>
-                  <div className="text-xl font-bold text-gray-900">₽3,285,000</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <ArrowDownRight className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-500">24ч Минимум</span>
-                  </div>
-                  <div className="text-xl font-bold text-gray-900">₽3,180,000</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <DollarSign className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-500">Рын. капитализация</span>
-                  </div>
-                  <div className="text-xl font-bold text-gray-900">₽64.2T</div>
-                </CardContent>
-              </Card>
-            </div>
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {loadErr && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            {loadErr}. Убедитесь, что запущены order-book-service и api-gateway (маршрут{" "}
+            <code className="text-xs">/api/exchange/order-book/*</code>).
           </div>
+        )}
 
-          {/* Trading Panel */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Торговая панель</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Tabs value={orderType} onValueChange={setOrderType} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="buy" className="text-green-600 data-[state=active]:bg-green-50">
-                      Купить
-                    </TabsTrigger>
-                    <TabsTrigger value="sell" className="text-red-600 data-[state=active]:bg-red-50">
-                      Продать
-                    </TabsTrigger>
-                  </TabsList>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+          {/* Список пар (упрощённо) */}
+          <aside className="xl:col-span-2">
+            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-50 border-b">
+                Рынки
+              </div>
+              <div className="p-2 text-sm">
+                <div className="grid grid-cols-3 gap-1 px-2 py-1 text-xs text-slate-500 border-b">
+                  <span>Пара</span>
+                  <span className="text-right">Цена</span>
+                  <span className="text-right">Δ</span>
+                </div>
+                <button
+                  type="button"
+                  className="w-full grid grid-cols-3 gap-1 px-2 py-2 rounded-lg text-left hover:bg-slate-50"
+                  style={{ borderLeft: `3px solid ${ACCENT}` }}
+                >
+                  <span className="font-medium">{PAIR_DISPLAY}</span>
+                  <span className="text-right tabular-nums" style={{ color: BUY }}>
+                    {Number.isFinite(mid) ? fmtMoney(mid) : "—"}
+                  </span>
+                  <span className="text-right text-xs text-slate-400">—</span>
+                </button>
+              </div>
+            </Card>
+          </aside>
 
-                  <TabsContent value="buy" className="space-y-4 mt-6">
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="buy-amount">Количество BTC</Label>
-                        <Input
-                          id="buy-amount"
-                          placeholder="0.00000000"
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="buy-price">Цена за BTC</Label>
-                        <Input
-                          id="buy-price"
-                          placeholder="3,250,000"
-                          value={price}
-                          onChange={(e) => setPrice(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label>Тип ордера</Label>
-                        <Select defaultValue="market">
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="market">Рыночный</SelectItem>
-                            <SelectItem value="limit">Лимитный</SelectItem>
-                            <SelectItem value="stop">Стоп-лосс</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="pt-4 border-t">
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-gray-500">Комиссия (0.1%)</span>
-                          <span className="text-gray-900">₽3,250</span>
-                        </div>
-                        <div className="flex justify-between text-sm mb-4">
-                          <span className="text-gray-500">Итого</span>
-                          <span className="font-bold text-gray-900">₽3,253,250</span>
-                        </div>
-                        <Button className="w-full bg-green-600 hover:bg-green-700 text-white">Купить BTC</Button>
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="sell" className="space-y-4 mt-6">
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="sell-amount">Количество BTC</Label>
-                        <Input
-                          id="sell-amount"
-                          placeholder="0.00000000"
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="sell-price">Цена за BTC</Label>
-                        <Input
-                          id="sell-price"
-                          placeholder="3,250,000"
-                          value={price}
-                          onChange={(e) => setPrice(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label>Тип ордера</Label>
-                        <Select defaultValue="market">
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="market">Рыночный</SelectItem>
-                            <SelectItem value="limit">Лимитный</SelectItem>
-                            <SelectItem value="stop">Стоп-лосс</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="pt-4 border-t">
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-gray-500">Комиссия (0.1%)</span>
-                          <span className="text-gray-900">₽3,250</span>
-                        </div>
-                        <div className="flex justify-between text-sm mb-4">
-                          <span className="text-gray-500">Получите</span>
-                          <span className="font-bold text-gray-900">₽3,246,750</span>
-                        </div>
-                        <Button className="w-full bg-red-600 hover:bg-red-700 text-white">Продать BTC</Button>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+          {/* График (заглушка под TradingView) */}
+          <section className="xl:col-span-7">
+            <Card className="rounded-xl border-slate-200 shadow-sm h-[420px] flex flex-col">
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-white">
+                {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    className={`px-2 py-1 text-xs rounded ${tf === "15M" ? "text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                    style={tf === "15M" ? { background: ACCENT } : {}}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+              <CardContent className="flex-1 flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100/80 m-3 rounded-lg border border-dashed border-slate-200">
+                {loading ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-slate-400" />
+                ) : (
+                  <p className="text-slate-500 text-sm text-center max-w-sm">
+                    График: подключите виджет TradingView или поток свечей. Сейчас отображаются стакан и сделки с
+                    order-book-service.
+                  </p>
+                )}
               </CardContent>
             </Card>
+          </section>
 
-            {/* Recent Orders */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="w-4 h-4 mr-2" />
-                  Последние ордера
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    { type: "buy", amount: "0.00154", price: "₽3,245,000", time: "14:32" },
-                    { type: "sell", amount: "0.00089", price: "₽3,248,000", time: "14:28" },
-                    { type: "buy", amount: "0.00234", price: "₽3,242,000", time: "14:25" },
-                  ].map((order, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Badge
-                          className={`${order.type === "buy" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+          {/* Сделки */}
+          <aside className="xl:col-span-3">
+            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden h-[420px] flex flex-col">
+              <div className="px-3 py-2 text-sm font-semibold bg-white border-b flex justify-between items-center">
+                <span>Сделки</span>
+                <span className="text-xs font-normal text-slate-400">{ORDER_BOOK_SYMBOL}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-0 text-[11px] text-slate-500 uppercase px-2 py-1.5 border-b bg-slate-50">
+                <span>Цена USDT</span>
+                <span className="text-right">BTC</span>
+                <span className="text-right">USDT</span>
+                <span className="text-right">Время</span>
+              </div>
+              <div className="flex-1 overflow-y-auto text-sm">
+                {trades.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-sm">Здесь пока пусто</div>
+                ) : (
+                  trades.map((t) => {
+                    const px = parseDec(t.price)
+                    const q = parseDec(t.quantity)
+                    const quote = parseDec(t.quote) || px * q
+                    const col = t.side === "buy" ? BUY : SELL
+                    return (
+                      <div key={t.id} className="grid grid-cols-4 px-2 py-1 border-b border-slate-100/80 tabular-nums">
+                        <span style={{ color: col }}>{fmtMoney(px)}</span>
+                        <span className="text-right text-slate-700">{fmtNum(q, 8)}</span>
+                        <span className="text-right text-slate-600">{fmtMoney(quote)}</span>
+                        <span className="text-right text-xs text-slate-400">
+                          {new Date(t.timestamp).toLocaleTimeString("ru-RU")}
+                        </span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </Card>
+          </aside>
+        </div>
+
+        {/* Стаканы + форма */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <OrderBookPanel
+            title="Ордера на продажу"
+            accent={SELL}
+            rows={asksDisplay}
+            sumHeader="Σ BTC"
+            className="lg:col-span-3"
+          />
+          <div className="lg:col-span-6">
+            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex border-b bg-white">
+                <button
+                  type="button"
+                  className={`flex-1 py-2.5 text-sm font-medium ${orderMode === "limit" ? "text-white" : "text-slate-600"}`}
+                  style={{ background: orderMode === "limit" ? ACCENT : "transparent" }}
+                  onClick={() => setOrderMode("limit")}
+                >
+                  Лимит
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2.5 text-sm font-medium ${orderMode === "market" ? "text-white" : "text-slate-600"}`}
+                  style={{ background: orderMode === "market" ? ACCENT : "transparent" }}
+                  onClick={() => setOrderMode("market")}
+                >
+                  Маркет
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                <div className="p-4 space-y-3 bg-white">
+                  <div className="text-sm font-semibold" style={{ color: BUY }}>
+                    Купить BTC
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-slate-500">Цена (USDT)</Label>
+                    <Input
+                      value={buyPrice}
+                      onChange={(e) => setBuyPrice(e.target.value)}
+                      disabled={orderMode === "market"}
+                      className="rounded-lg border-slate-200"
+                    />
+                    <Label className="text-xs text-slate-500">Количество (BTC)</Label>
+                    <Input value={buyAmount} onChange={(e) => setBuyAmount(e.target.value)} className="rounded-lg border-slate-200" />
+                    <div className="flex gap-1 pt-1">
+                      {[25, 50, 75, 100].map((p) => (
+                        <Button
+                          key={p}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs h-8"
+                          onClick={() => {
+                            /* заглушка: без баланса BTC не считаем % */
+                          }}
                         >
-                          {order.type === "buy" ? "Покупка" : "Продажа"}
-                        </Badge>
-                        <span className="text-sm text-gray-600">{order.time}</span>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-medium">{order.amount} BTC</div>
-                        <div className="text-xs text-gray-500">{order.price}</div>
-                      </div>
+                          {p}%
+                        </Button>
+                      ))}
                     </div>
-                  ))}
+                    <div className="text-xs text-slate-500 pt-1">
+                      Итого ≈{" "}
+                      {fmtMoney(
+                        parseDec(buyAmount) * (orderMode === "market" && Number.isFinite(mid) ? mid : parseDec(buyPrice)),
+                      )}{" "}
+                      USDT · комиссия {FEE_RATE * 100}%
+                    </div>
+                  </div>
+                  {!usdtWallet ? (
+                    <Button asChild className="w-full rounded-lg h-11 text-white shadow" style={{ background: ACCENT }}>
+                      <Link href="/login">Авторизация</Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full rounded-lg h-11 text-white shadow disabled:opacity-60"
+                      style={{ background: BUY }}
+                      disabled={!!submitting}
+                      onClick={() => void place("buy")}
+                    >
+                      {submitting === "buy" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : "Купить BTC"}
+                    </Button>
+                  )}
                 </div>
-              </CardContent>
+                <div className="p-4 space-y-3 bg-white">
+                  <div className="text-sm font-semibold" style={{ color: SELL }}>
+                    Продать BTC
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-slate-500">Цена (USDT)</Label>
+                    <Input
+                      value={sellPrice}
+                      onChange={(e) => setSellPrice(e.target.value)}
+                      disabled={orderMode === "market"}
+                      className="rounded-lg border-slate-200"
+                    />
+                    <Label className="text-xs text-slate-500">Количество (BTC)</Label>
+                    <Input value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} className="rounded-lg border-slate-200" />
+                    <div className="text-xs text-slate-500 pt-6">
+                      Получите ≈{" "}
+                      {fmtMoney(
+                        parseDec(sellAmount) * (orderMode === "market" && Number.isFinite(mid) ? mid : parseDec(sellPrice)),
+                      )}{" "}
+                      USDT
+                    </div>
+                  </div>
+                  {!usdtWallet ? (
+                    <Button asChild className="w-full rounded-lg h-11 text-white shadow" style={{ background: ACCENT }}>
+                      <Link href="/login">Авторизация</Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full rounded-lg h-11 text-white shadow disabled:opacity-60"
+                      style={{ background: SELL }}
+                      disabled={!!submitting}
+                      onClick={() => void place("sell")}
+                    >
+                      {submitting === "sell" ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : "Продать BTC"}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </Card>
           </div>
+          <OrderBookPanel
+            title="Ордера на покупку"
+            accent={BUY}
+            rows={bidsDisplay}
+            sumHeader="Σ USDT"
+            className="lg:col-span-3"
+          />
         </div>
       </div>
     </div>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  valueClass = "text-slate-800",
+}: {
+  label: string
+  value: string
+  valueClass?: string
+}) {
+  return (
+    <div>
+      <div className="text-slate-500 text-xs">{label}</div>
+      <div className={`font-medium tabular-nums ${valueClass}`}>{value}</div>
+    </div>
+  )
+}
+
+function OrderBookPanel({
+  title,
+  accent,
+  rows,
+  sumHeader,
+  className,
+}: {
+  title: string
+  accent: string
+  rows: ExchangeOrderBookEntry[]
+  sumHeader: string
+  className?: string
+}) {
+  const sumBtc = rows.reduce((s, r) => s + parseDec(r.quantity), 0)
+  const sumUsdt = rows.reduce((s, r) => s + parseDec(r.quantity) * parseDec(r.price), 0)
+
+  return (
+    <Card className={`rounded-xl border-slate-200 shadow-sm overflow-hidden ${className ?? ""}`}>
+      <div className="px-3 py-2 flex justify-between items-center text-sm font-semibold bg-white border-b">
+        <span>{title}</span>
+        <span className="text-xs font-normal tabular-nums text-slate-500">
+          {sumHeader}: {title.includes("продажу") ? fmtNum(sumBtc, 8) : fmtMoney(sumUsdt)}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-0 text-[11px] text-slate-500 uppercase px-2 py-1.5 border-b bg-slate-50">
+        <span>Цена</span>
+        <span className="text-right">BTC</span>
+        <span className="text-right">USDT</span>
+      </div>
+      <div className="max-h-[340px] overflow-y-auto bg-white text-sm">
+        {rows.length === 0 ? (
+          <div className="p-6 text-center text-slate-400 text-sm">Нет заявок</div>
+        ) : (
+          rows.map((r, i) => {
+            const px = parseDec(r.price)
+            const q = parseDec(r.quantity)
+            const qUsdt = px * q
+            return (
+              <div key={`${r.price}-${i}`} className="grid grid-cols-3 px-2 py-1 border-b border-slate-50 tabular-nums hover:bg-slate-50/80">
+                <span style={{ color: accent }} className="font-medium">
+                  {fmtMoney(px)}
+                </span>
+                <span className="text-right text-slate-700">{fmtNum(q, 8)}</span>
+                <span className="text-right text-slate-600">{fmtMoney(qUsdt)}</span>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </Card>
   )
 }

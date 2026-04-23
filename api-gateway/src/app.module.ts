@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health/health.controller';
@@ -20,6 +21,9 @@ import { SpotExchangeModule } from './spot-exchange/spot-exchange.module';
       },
     ]),
     TerminusModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+    }),
     SpotExchangeModule,
   ],
   controllers: [HealthController, ProxyController],

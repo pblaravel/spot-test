@@ -8,6 +8,8 @@ import * as crypto from 'crypto';
 export interface CreateWalletDto {
   userId: string;
   currency: string;
+  /** Если задано, кошелёк создаётся с этим балансом и записью о зачислении (демо / бонус при регистрации). */
+  initialBalance?: number;
 }
 
 export interface DepositDto {
@@ -88,18 +90,37 @@ export class WalletService {
       throw new ConflictException(`Wallet for currency ${createWalletDto.currency} already exists for this user`);
     }
 
+    const initial = createWalletDto.initialBalance ?? 0;
+    const { initialBalance: _omit, ...walletFields } = createWalletDto;
+
     const wallet = this.walletRepository.create({
-      ...createWalletDto,
+      ...walletFields,
       address: this.generateWalletAddress(createWalletDto.currency),
-      balance: 0,
+      balance: initial,
       lockedBalance: 0,
-      totalDeposited: 0,
+      totalDeposited: initial,
       totalWithdrawn: 0,
       status: WalletStatus.ACTIVE,
       isActive: true,
     });
 
     const savedWallet = await this.walletRepository.save(wallet);
+
+    if (initial > 0) {
+      const bonusTx = this.transactionRepository.create({
+        walletId: savedWallet.id,
+        userId: savedWallet.userId,
+        type: TransactionType.DEPOSIT,
+        status: TransactionStatus.CONFIRMED,
+        amount: initial,
+        fee: 0,
+        currency: savedWallet.currency,
+        description: 'Registration bonus (demo USDT)',
+        confirmations: 1,
+      });
+      await this.transactionRepository.save(bonusTx);
+    }
+
     return this.mapToWalletResponse(savedWallet);
   }
 

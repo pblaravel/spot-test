@@ -177,6 +177,32 @@ INSERT INTO trading.trading_pairs (base_currency, quote_currency, symbol, min_or
 ('XRP', 'USDT', 'XRPUSDT', 1, 10000000, 0.0001, 0.001, 0.001)
 ON CONFLICT (symbol) DO NOTHING;
 
+-- Демо-аккаунты для ручного теста торговли (пароль у всех: DemoTrader123!)
+INSERT INTO users.users (id, email, password_hash, first_name, last_name, is_verified, is_active)
+VALUES
+    ('00000000-0000-4000-8000-000000000001'::uuid, 'demo.alice@cryptospot.demo', '$2a$10$qjHxmGIdjqBFtJkwrlxj4ej8q1ba7YWCQ.JCAJyZRyEeYhTuUZGbO', 'Alice', 'Demo', TRUE, TRUE),
+    ('00000000-0000-4000-8000-000000000002'::uuid, 'demo.bob@cryptospot.demo', '$2a$10$qjHxmGIdjqBFtJkwrlxj4ej8q1ba7YWCQ.JCAJyZRyEeYhTuUZGbO', 'Bob', 'Demo', TRUE, TRUE)
+ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO wallets.wallets (user_id, currency, balance, locked_balance, total_deposited, total_withdrawn, status, address, is_active, last_activity_at)
+VALUES
+    ('00000000-0000-4000-8000-000000000001'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_demo_alice', TRUE, CURRENT_TIMESTAMP),
+    ('00000000-0000-4000-8000-000000000002'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_demo_bob', TRUE, CURRENT_TIMESTAMP)
+ON CONFLICT (user_id, currency) DO NOTHING;
+
+INSERT INTO wallets.transactions (wallet_id, user_id, type, status, amount, fee, currency, description, confirmations)
+SELECT w.id, w.user_id, 'deposit', 'confirmed', 1000, 0, 'USDT', 'Demo seed balance', 1
+FROM wallets.wallets w
+WHERE w.user_id IN (
+    '00000000-0000-4000-8000-000000000001'::uuid,
+    '00000000-0000-4000-8000-000000000002'::uuid
+  )
+  AND w.currency = 'USDT'
+  AND NOT EXISTS (
+    SELECT 1 FROM wallets.transactions t
+    WHERE t.wallet_id = w.id AND t.description = 'Demo seed balance'
+  );
+
 -- Функция для обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

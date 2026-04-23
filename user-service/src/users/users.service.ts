@@ -42,6 +42,10 @@ export class UsersService {
     private jwtService: JwtService,
   ) {}
 
+  async removeUser(userId: string): Promise<void> {
+    await this.userRepository.delete(userId);
+  }
+
   async createUser(createUserDto: CreateUserDto): Promise<UserResponse> {
     const existingUser = await this.userRepository.findOne({
       where: { email: createUserDto.email },

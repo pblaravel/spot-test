@@ -22,11 +22,15 @@ import (
 	"github.com/spf13/viper"
 )
 
+const maxTradesPerSymbol = 200
+
 var (
 	rdb             *redis.Client
 	logger          *logrus.Logger
 	orderBooks      = make(map[string]*OrderBook)
 	orderBooksMutex sync.RWMutex
+	tradesBySymbol  = make(map[string][]MarketTrade)
+	tradesMutex     sync.RWMutex
 )
 
 // Order представляет ордер в стакане
@@ -61,6 +65,17 @@ type OrderBookEntry struct {
 	Price    decimal.Decimal `json:"price"`
 	Quantity decimal.Decimal `json:"quantity"`
 	Count    int             `json:"count"`
+}
+
+// MarketTrade — запись в ленте сделок по паре (агрегатор ликвидности / симуляция)
+type MarketTrade struct {
+	ID        string          `json:"id"`
+	Symbol    string          `json:"symbol"`
+	Side      string          `json:"side"`
+	Price     decimal.Decimal `json:"price"`
+	Quantity  decimal.Decimal `json:"quantity"`
+	Quote     decimal.Decimal `json:"quote"`
+	Timestamp time.Time       `json:"timestamp"`
 }
 
 // CreateOrderRequest представляет запрос на создание ордера
@@ -118,6 +133,7 @@ func main() {
 	{
 		api.POST("/orders", createOrder)
 		api.GET("/orderbook/:symbol", getOrderBook)
+		api.GET("/trades/:symbol", getRecentTrades)
 		api.DELETE("/orders/:id", cancelOrder)
 		api.GET("/orders", listOrders)
 	}
@@ -306,6 +322,8 @@ func createOrder(c *gin.Context) {
 	// Сохраняем в Redis
 	saveOrderToRedis(order)
 
+	appendTrade(order)
+
 	c.JSON(http.StatusOK, CreateOrderResponse{
 		OrderID: order.ID,
 		Status:  "created",
@@ -321,12 +339,60 @@ func getOrderBook(c *gin.Context) {
 	orderBooksMutex.RUnlock()
 
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order book not found for symbol: " + symbol})
+		// Пустой стакан — отдаём валидный снимок без 404 (удобно для UI до первого ордера)
+		c.JSON(http.StatusOK, OrderBookSnapshot{
+			Symbol:    symbol,
+			Timestamp: time.Now().UTC(),
+			Bids:      []OrderBookEntry{},
+			Asks:      []OrderBookEntry{},
+		})
 		return
 	}
 
 	snapshot := orderBook.GetSnapshot()
 	c.JSON(http.StatusOK, snapshot)
+}
+
+func appendTrade(order Order) {
+	if order.Symbol == "" {
+		return
+	}
+	quote := order.Quantity.Mul(order.Price)
+	t := MarketTrade{
+		ID:        order.ID,
+		Symbol:    order.Symbol,
+		Side:      order.Side,
+		Price:     order.Price,
+		Quantity:  order.Quantity,
+		Quote:     quote,
+		Timestamp: order.Timestamp,
+	}
+	tradesMutex.Lock()
+	defer tradesMutex.Unlock()
+	sl := tradesBySymbol[order.Symbol]
+	sl = append([]MarketTrade{t}, sl...)
+	if len(sl) > maxTradesPerSymbol {
+		sl = sl[:maxTradesPerSymbol]
+	}
+	tradesBySymbol[order.Symbol] = sl
+}
+
+func getRecentTrades(c *gin.Context) {
+	symbol := strings.ToUpper(c.Param("symbol"))
+	limit := 50
+	tradesMutex.RLock()
+	sl := tradesBySymbol[symbol]
+	tradesMutex.RUnlock()
+	if len(sl) > limit {
+		sl = sl[:limit]
+	}
+	if sl == nil {
+		sl = []MarketTrade{}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"symbol": symbol,
+		"trades": sl,
+	})
 }
 
 func cancelOrder(c *gin.Context) {

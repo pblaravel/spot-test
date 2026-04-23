@@ -198,14 +198,18 @@ services:
       REDIS_URL: redis://redis:6379
       USER_SERVICE_URL: http://user-service:3001
       WALLET_SERVICE_URL: http://wallet-service:3002
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
       TRADING_ENGINE_URL: http://trading-engine:8080
       ORDER_BOOK_SERVICE_URL: http://order-book-service:8081
+      MARKET_MAKER_SERVICE_URL: http://market-maker-service:3007
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 24h
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      order-book-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -229,6 +233,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 24h
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
       KAFKA_BROKERS: kafka:9092
     depends_on:
       postgres:
@@ -257,6 +263,7 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://admin:password@postgres:5432/crypto_exchange
       REDIS_URL: redis://redis:6379
+      INTERNAL_API_KEY: dev-internal-wallet-key-change-in-production
     depends_on:
       postgres:
         condition: service_healthy
@@ -285,6 +292,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      order-book-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -308,6 +317,32 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - crypto-network
+
+  # Market Maker — заполняет стакан лимитными заявками в order-book-service
+  market-maker-service:
+    build:
+      context: ./market-maker-service
+      dockerfile: Dockerfile
+    container_name: market-maker-service
+    ports:
+      - "3007:3007"
+    environment:
+      NODE_ENV: development
+      REDIS_URL: redis://redis:6379
+      ORDER_BOOK_SERVICE_URL: http://order-book-service:8081
+      LIQUIDITY_SYMBOL: BTCUSDT
+    depends_on:
+      redis:
+        condition: service_healthy
+      order-book-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Navigation } from "@/components/navigation"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
+import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] })
 
@@ -23,6 +24,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Navigation />
         <AuthenticatedLayout>{children}</AuthenticatedLayout>
+        <Toaster />
       </body>
     </html>
   )

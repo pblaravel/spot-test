@@ -1,11 +1,13 @@
-import { 
-  Controller, 
-  All, 
-  Req, 
-  Res, 
+import {
+  Controller,
+  All,
+  Get,
+  Req,
+  Res,
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { ProxyService } from './proxy.service';
 import { ApiTags, ApiBearerAuth, ApiExcludeController } from '@nestjs/swagger';
 
@@ -15,7 +17,30 @@ import { ApiTags, ApiBearerAuth, ApiExcludeController } from '@nestjs/swagger';
 @ApiExcludeController()
 @ApiBearerAuth()
 export class ProxyController {
-  constructor(private readonly proxyService: ProxyService) {}
+  constructor(
+    private readonly proxyService: ProxyService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  @Get('wallet/me/usdt')
+  async getMyUsdtWallet(@Req() req: Request, @Res() res: Response) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(HttpStatus.UNAUTHORIZED).json({ message: 'Missing bearer token' });
+      }
+      const token = authHeader.slice(7);
+      const payload = this.jwtService.verify<{ sub: string }>(token);
+      const path = `/api/v1/wallets/user/${payload.sub}/currency/USDT`;
+      const result = await this.proxyService.proxyToWalletService('get', path, undefined, {});
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error: any) {
+      if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
+        return res.status(HttpStatus.UNAUTHORIZED).json({ message: 'Invalid or expired token' });
+      }
+      this.handleError(error, res);
+    }
+  }
 
   @All('users/*')
   async proxyToUserService(@Req() req: Request, @Res() res: Response) {
@@ -107,6 +132,23 @@ export class ProxyController {
 
       const result = await this.proxyService.proxyToMarketMakerService(method, path, data, headers);
       
+      res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      this.handleError(error, res);
+    }
+  }
+
+  /** Прямой доступ к order-book-service (стакан и сделки по паре) */
+  @All('exchange/order-book/*')
+  async proxyToOrderBookService(@Req() req: Request, @Res() res: Response) {
+    try {
+      const path = req.url.replace('/api/exchange/order-book', '/api/v1');
+      const method = req.method.toLowerCase();
+      const data = method === 'get' ? undefined : req.body;
+      const headers = this.extractHeaders(req);
+
+      const result = await this.proxyService.proxyToOrderBookService(method, path, data, headers);
+
       res.status(HttpStatus.OK).json(result);
     } catch (error) {
       this.handleError(error, res);

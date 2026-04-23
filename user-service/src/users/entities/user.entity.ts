@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 
-@Entity('users')
+@Entity({ name: 'users', schema: 'users' })
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -9,7 +9,7 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column()
+  @Column({ name: 'password_hash' })
   password: string;
 
   @Column()

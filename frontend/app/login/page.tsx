@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +24,12 @@ export default function LoginPage() {
 
   const router = useRouter()
   const { login } = useAuth()
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const q = p.get("email")
+    if (q) setEmail(decodeURIComponent(q))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

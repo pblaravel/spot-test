@@ -27,8 +27,39 @@ export interface Wallet {
   currency: string;
   balance: number;
   lockedBalance: number;
+  totalDeposited?: number;
+  totalWithdrawn?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Уровень стакана из order-book-service (агрегированный) */
+export interface ExchangeOrderBookEntry {
+  price: string;
+  quantity: string;
+  count: number;
+}
+
+export interface ExchangeOrderBookSnapshot {
+  symbol: string;
+  timestamp: string;
+  bids: ExchangeOrderBookEntry[];
+  asks: ExchangeOrderBookEntry[];
+}
+
+export interface ExchangeTrade {
+  id: string;
+  symbol: string;
+  side: string;
+  price: string;
+  quantity: string;
+  quote: string;
+  timestamp: string;
+}
+
+export interface ExchangeTradesResponse {
+  symbol: string;
+  trades: ExchangeTrade[];
 }
 
 export interface Transaction {
@@ -159,6 +190,36 @@ class ApiClient {
   // Wallet API
   async getWallets(): Promise<ApiResponse<Wallet[]>> {
     return this.request('/api/wallet/wallets');
+  }
+
+  /** USDT-кошелёк текущего пользователя (JWT), через api-gateway */
+  async getMyUsdtWallet(): Promise<ApiResponse<Wallet>> {
+    return this.request('/api/wallet/me/usdt');
+  }
+
+  /** Стакан с биржевого движка (order-book-service через gateway) */
+  async getExchangeOrderBook(symbol: string): Promise<ApiResponse<ExchangeOrderBookSnapshot>> {
+    const sym = encodeURIComponent(symbol.toUpperCase());
+    return this.request(`/api/exchange/order-book/orderbook/${sym}`);
+  }
+
+  async getExchangeTrades(symbol: string): Promise<ApiResponse<ExchangeTradesResponse>> {
+    const sym = encodeURIComponent(symbol.toUpperCase());
+    return this.request(`/api/exchange/order-book/trades/${sym}`);
+  }
+
+  /** Лимитная заявка в стакан (quantity и price — строки для decimal) */
+  async createExchangeOrder(body: {
+    symbol: string;
+    side: 'buy' | 'sell';
+    type: 'limit' | 'market';
+    quantity: string;
+    price?: string;
+  }): Promise<ApiResponse<{ order_id: string; status: string; message: string }>> {
+    return this.request('/api/exchange/order-book/orders', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
   }
 
   async getWallet(walletId: string): Promise<ApiResponse<Wallet>> {

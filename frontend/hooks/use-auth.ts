@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient, User } from '@/lib/api-client';
 
+function extractAccessToken(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.accessToken === 'string') return p.accessToken;
+  if (typeof p.token === 'string') return p.token;
+  return undefined;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -52,7 +60,11 @@ export function useAuth() {
     try {
       const response = await apiClient.login(email, password);
       if (response.data) {
-        const { token, user } = response.data;
+        const token = extractAccessToken(response.data);
+        const user = (response.data as { user: User }).user;
+        if (!token) {
+          return { success: false, error: 'No access token in response' };
+        }
         localStorage.setItem('auth_token', token);
         apiClient.setToken(token);
         
@@ -82,7 +94,11 @@ export function useAuth() {
     try {
       const response = await apiClient.register(userData);
       if (response.data) {
-        const { token, user } = response.data;
+        const token = extractAccessToken(response.data);
+        const user = (response.data as { user: User }).user;
+        if (!token) {
+          return { success: false, error: 'No access token in response' };
+        }
         localStorage.setItem('auth_token', token);
         apiClient.setToken(token);
         
@@ -117,9 +133,10 @@ export function useAuth() {
     try {
       const response = await apiClient.updateProfile(userData);
       if (response.data) {
+        const updated = response.data as User;
         setAuthState((prev: AuthState) => ({
           ...prev,
-          user: response.data,
+          user: updated,
         }));
         return { success: true };
       } else {

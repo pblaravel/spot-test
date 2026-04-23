@@ -99,7 +99,8 @@ describe('WalletService', () => {
         where: { userId: createWalletDto.userId, currency: createWalletDto.currency },
       });
       expect(walletRepository.create).toHaveBeenCalledWith({
-        ...createWalletDto,
+        userId: createWalletDto.userId,
+        currency: createWalletDto.currency,
         address: expect.any(String),
         balance: 0,
         lockedBalance: 0,
@@ -402,12 +403,10 @@ describe('WalletService', () => {
         amount: 0.5,
         fee: 0.0001,
         currency,
-        txHash: '',
         fromAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
         toAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
         memo: undefined,
         description: 'Test withdrawal',
-        confirmations: 0,
       });
       expect(result).toHaveProperty('type', 'withdrawal');
       expect(result).toHaveProperty('amount', 0.5);
