@@ -39,7 +39,7 @@ export default function LoginPage() {
     // Реальный вызов логина
     const result = await login(email, password)
     if (result.success) {
-      router.push("/dashboard")
+      router.push("/trading")
     } else {
       setError(result.error || "Неверный email или пароль")
     }
@@ -64,7 +64,13 @@ export default function LoginPage() {
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">Вход</CardTitle>
-            <CardDescription className="text-center">Введите ваши данные для входа в систему</CardDescription>
+            <CardDescription className="text-center space-y-1">
+              <span className="block">Введите email и пароль.</span>
+              <span className="block text-xs text-muted-foreground">
+                Демо после init БД: <strong>test@example.com</strong> / <strong>password123</strong> или{" "}
+                <strong>demo.alice@cryptospot.demo</strong> / <strong>DemoTrader123!</strong>
+              </span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

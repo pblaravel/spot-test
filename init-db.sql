@@ -141,6 +141,11 @@ CREATE TABLE IF NOT EXISTS analytics.daily_stats (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users.users(created_at);
 
+-- Поля под регистрацию/NestJS (новые поднимутся без пересоздания таблицы)
+ALTER TABLE users.users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255);
+ALTER TABLE users.users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255);
+ALTER TABLE users.users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP;
+
 CREATE INDEX IF NOT EXISTS idx_wallets_user_currency ON wallets.wallets(user_id, currency);
 CREATE INDEX IF NOT EXISTS idx_wallets_status ON wallets.wallets(status);
 
@@ -177,17 +182,24 @@ INSERT INTO trading.trading_pairs (base_currency, quote_currency, symbol, min_or
 ('XRP', 'USDT', 'XRPUSDT', 1, 10000000, 0.0001, 0.001, 0.001)
 ON CONFLICT (symbol) DO NOTHING;
 
--- Демо-аккаунты для ручного теста торговли (пароль у всех: DemoTrader123!)
+-- Демо: demo.alice@cryptospot.demo / demo.bob@cryptospot.demo — пароль DemoTrader123!
 INSERT INTO users.users (id, email, password_hash, first_name, last_name, is_verified, is_active)
 VALUES
     ('00000000-0000-4000-8000-000000000001'::uuid, 'demo.alice@cryptospot.demo', '$2a$10$qjHxmGIdjqBFtJkwrlxj4ej8q1ba7YWCQ.JCAJyZRyEeYhTuUZGbO', 'Alice', 'Demo', TRUE, TRUE),
     ('00000000-0000-4000-8000-000000000002'::uuid, 'demo.bob@cryptospot.demo', '$2a$10$qjHxmGIdjqBFtJkwrlxj4ej8q1ba7YWCQ.JCAJyZRyEeYhTuUZGbO', 'Bob', 'Demo', TRUE, TRUE)
 ON CONFLICT (email) DO NOTHING;
 
+-- Совпадает с примерами в README / API_DOCUMENTATION: test@example.com / password123
+INSERT INTO users.users (id, email, password_hash, first_name, last_name, is_verified, is_active)
+VALUES
+    ('00000000-0000-4000-8000-000000000088'::uuid, 'test@example.com', '$2b$10$Xp6vSE4DeoN/UcFkdPGGauiWla/COzIN9Lfuq4DgdhQDAKBt8SsKi', 'Test', 'Example', TRUE, TRUE)
+ON CONFLICT (email) DO NOTHING;
+
 INSERT INTO wallets.wallets (user_id, currency, balance, locked_balance, total_deposited, total_withdrawn, status, address, is_active, last_activity_at)
 VALUES
     ('00000000-0000-4000-8000-000000000001'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_demo_alice', TRUE, CURRENT_TIMESTAMP),
-    ('00000000-0000-4000-8000-000000000002'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_demo_bob', TRUE, CURRENT_TIMESTAMP)
+    ('00000000-0000-4000-8000-000000000002'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_demo_bob', TRUE, CURRENT_TIMESTAMP),
+    ('00000000-0000-4000-8000-000000000088'::uuid, 'USDT', 1000, 0, 1000, 0, 'active', 'usdt_test_example', TRUE, CURRENT_TIMESTAMP)
 ON CONFLICT (user_id, currency) DO NOTHING;
 
 INSERT INTO wallets.transactions (wallet_id, user_id, type, status, amount, fee, currency, description, confirmations)
@@ -195,7 +207,8 @@ SELECT w.id, w.user_id, 'deposit', 'confirmed', 1000, 0, 'USDT', 'Demo seed bala
 FROM wallets.wallets w
 WHERE w.user_id IN (
     '00000000-0000-4000-8000-000000000001'::uuid,
-    '00000000-0000-4000-8000-000000000002'::uuid
+    '00000000-0000-4000-8000-000000000002'::uuid,
+    '00000000-0000-4000-8000-000000000088'::uuid
   )
   AND w.currency = 'USDT'
   AND NOT EXISTS (

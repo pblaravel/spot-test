@@ -259,6 +259,14 @@ export default function TradingPage() {
           </div>
         )}
 
+        {!loadErr && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600 leading-relaxed">
+            Пустой стакан нормален после старта: заявки появятся от ваших лимитных ордеров или от сервиса{" "}
+            <strong>market-maker-service</strong> (в <code className="text-[11px]">docker-compose</code> он шлёт сетку
+            в order-book-service). Если MM не запущен, выставьте лимит вручную — уровень появится в книге.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
           {/* Список пар */}
           <aside className="xl:col-span-2">
