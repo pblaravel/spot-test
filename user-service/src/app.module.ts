@@ -21,7 +21,7 @@ import { TerminusModule } from '@nestjs/terminus';
       url: process.env.DATABASE_URL,
       schema: 'users',
       entities: [User],
-      synchronize: process.env.NODE_ENV === 'development',
+      synchronize: process.env.TYPEORM_SYNC === 'true',
     }),
     TypeOrmModule.forFeature([User]),
     HttpModule.register({

@@ -19,4 +19,4 @@ RUN npm install --omit=dev
 
 EXPOSE 3002
 
-CMD ["node", "dist/main"] 
+CMD ["node", "dist/src/main.js"] 
