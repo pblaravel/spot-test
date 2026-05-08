@@ -60,8 +60,8 @@ nohup env NODE_ENV=development PORT=3000 DATABASE_URL="$DATABASE_URL" REDIS_URL=
   sh -c 'cd "'"$ROOT"'/api-gateway" && exec npm run start:dev' > /tmp/logs/gateway.log 2>&1 &
 sleep 4
 
-nohup env NEXT_PUBLIC_API_URL="http://127.0.0.1:3000" \
-  sh -c 'cd "'"$ROOT"'/frontend" && exec pnpm dev --port 3008 -H 0.0.0.0' > /tmp/logs/frontend.log 2>&1 &
+nohup env NEXT_PUBLIC_API_URL="http://127.0.0.1:3000" CI=true \
+  sh -c 'cd "'"$ROOT"'/frontend" && exec ./node_modules/.bin/next dev --port 3008 -H 0.0.0.0' > /tmp/logs/frontend.log 2>&1 &
 
 sleep 3
 echo "--- Health ---"
