@@ -1,0 +1,8 @@
+{
+  "name": "spot-test-cloud-agent",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "bash .cursor/agent-bootstrap.sh"
+}
