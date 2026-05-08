@@ -67,21 +67,21 @@ echo "============================="
 # Тест 1: Регистрация пользователя
 echo ""
 echo "1️⃣ Тестирование регистрации пользователя"
-test_api "POST" "http://localhost:3000/api/users/auth/register" \
+test_api "POST" "http://localhost:3000/api/v1/users/register" \
     '{"email":"test@example.com","password":"password123","firstName":"John","lastName":"Doe"}' \
     "Регистрация нового пользователя"
 
 # Тест 2: Логин пользователя
 echo ""
 echo "2️⃣ Тестирование входа пользователя"
-test_api "POST" "http://localhost:3000/api/users/auth/login" \
+test_api "POST" "http://localhost:3000/api/v1/users/login" \
     '{"email":"test@example.com","password":"password123"}' \
     "Вход пользователя"
 
 # Сохраняем токен для последующих тестов
 echo ""
 echo "💾 Получение токена для авторизованных запросов..."
-login_response=$(curl -s -X POST "http://localhost:3000/api/users/auth/login" \
+login_response=$(curl -s -X POST "http://localhost:3000/api/v1/users/login" \
     -H "Content-Type: application/json" \
     -d '{"email":"test@example.com","password":"password123"}')
 
@@ -102,12 +102,12 @@ fi
 if [ -n "$token" ]; then
     echo ""
     echo "3️⃣ Тестирование получения профиля"
-    test_api "GET" "http://localhost:3000/api/users/profile" \
+    test_api "GET" "http://localhost:3000/api/v1/users/profile" \
         "" \
         "Получение профиля пользователя (авторизованный)"
     
     # Добавляем заголовок авторизации
-    curl -s -X GET "http://localhost:3000/api/users/profile" \
+    curl -s -X GET "http://localhost:3000/api/v1/users/profile" \
         -H "Authorization: Bearer $token" | head -c 200
     echo "..."
 fi
@@ -116,12 +116,12 @@ fi
 if [ -n "$token" ]; then
     echo ""
     echo "4️⃣ Тестирование обновления профиля"
-    test_api "PUT" "http://localhost:3000/api/users/profile" \
+    test_api "PUT" "http://localhost:3000/api/v1/users/profile" \
         '{"firstName":"Jane","lastName":"Smith"}' \
         "Обновление профиля пользователя"
     
     # Добавляем заголовок авторизации
-    curl -s -X PUT "http://localhost:3000/api/users/profile" \
+    curl -s -X PUT "http://localhost:3000/api/v1/users/profile" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
         -d '{"firstName":"Jane","lastName":"Smith"}' | head -c 200
@@ -132,7 +132,7 @@ fi
 if [ -n "$token" ]; then
     echo ""
     echo "5️⃣ Тестирование смены пароля"
-    test_api "PUT" "http://localhost:3000/api/users/change-password" \
+    test_api "PUT" "http://localhost:3000/api/v1/users/change-password" \
         '{"oldPassword":"password123","newPassword":"newpassword123"}' \
         "Смена пароля пользователя"
 fi
@@ -141,7 +141,7 @@ fi
 if [ -n "$token" ]; then
     echo ""
     echo "6️⃣ Тестирование получения списка пользователей"
-    test_api "GET" "http://localhost:3000/api/users?page=1&limit=10" \
+    test_api "GET" "http://localhost:3000/api/v1/users?page=1&limit=10" \
         "" \
         "Получение списка пользователей"
 fi
@@ -149,14 +149,14 @@ fi
 # Тест 7: Восстановление пароля
 echo ""
 echo "7️⃣ Тестирование восстановления пароля"
-test_api "POST" "http://localhost:3000/api/users/forgot-password" \
+test_api "POST" "http://localhost:3000/api/v1/users/forgot-password" \
     '{"email":"test@example.com"}' \
     "Запрос на восстановление пароля"
 
 # Тест 8: Обновление токена
 echo ""
 echo "8️⃣ Тестирование обновления токена"
-test_api "POST" "http://localhost:3000/api/users/refresh" \
+test_api "POST" "http://localhost:3000/api/v1/users/refresh" \
     '{"refreshToken":"test-refresh-token"}' \
     "Обновление access token"
 
@@ -164,7 +164,7 @@ test_api "POST" "http://localhost:3000/api/users/refresh" \
 if [ -n "$token" ]; then
     echo ""
     echo "9️⃣ Тестирование выхода из системы"
-    test_api "POST" "http://localhost:3000/api/users/logout" \
+    test_api "POST" "http://localhost:3000/api/v1/users/logout" \
         "" \
         "Выход из системы"
 fi

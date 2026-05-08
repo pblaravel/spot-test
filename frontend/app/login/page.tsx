@@ -39,7 +39,7 @@ export default function LoginPage() {
     // Реальный вызов логина
     const result = await login(email, password)
     if (result.success) {
-      router.push("/dashboard")
+      router.push("/trading")
     } else {
       setError(result.error || "Неверный email или пароль")
     }

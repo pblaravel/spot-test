@@ -187,7 +187,7 @@ export default function TradingPage() {
     const amtStr = side === "buy" ? buyAmount : sellAmount
     const qty = parseDec(amtStr)
     if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("Укажите объём BTC")
+      toast.error(`Укажите объём ${market.base}`)
       return
     }
     if (orderMode === "limit") {

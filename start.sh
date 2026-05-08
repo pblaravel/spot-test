@@ -67,18 +67,15 @@ docker-compose up -d user-service
 echo "💰 Запуск Wallet Service..."
 docker-compose up -d wallet-service
 
-echo "🔔 Запуск Notification Service..."
-docker-compose up -d notification-service
-
-echo "📈 Запуск Analytics Service..."
-docker-compose up -d analytics-service
-
 echo "🤖 Запуск Market Maker Service..."
 docker-compose up -d market-maker-service
 
 # В последнюю очередь API Gateway
 echo "🌐 Запуск API Gateway..."
 docker-compose up -d api-gateway
+
+echo "🖥️  Запуск веб-интерфейса (Next.js)..."
+docker-compose up -d frontend
 
 # Ждем запуска всех сервисов
 echo "⏳ Ожидание запуска всех сервисов..."
@@ -92,12 +89,11 @@ echo ""
 echo "🎉 Криптобиржа запущена!"
 echo ""
 echo "📱 Доступные сервисы:"
+echo "   • Веб-интерфейс: http://localhost:3008 — регистрация, вход, торговля"
 echo "   • API Gateway: http://localhost:3000"
 echo "   • User Service: http://localhost:3001"
 echo "   • Wallet Service: http://localhost:3002"
-echo "   • Notification Service: http://localhost:3003"
-echo "   • Analytics Service: http://localhost:3004"
-echo "   • Market Maker Service: http://localhost:3005"
+echo "   • Market Maker Service: http://localhost:3007"
 echo "   • Trading Engine: http://localhost:8080"
 echo "   • Order Book Service: http://localhost:8081"
 echo ""
