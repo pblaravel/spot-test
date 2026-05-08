@@ -322,9 +322,9 @@ export default function TradingPage() {
 
           <section className="xl:col-span-7">
             <TradingPriceChart
+              pairLabel={market.display}
               trades={trades}
               quote={market.quote}
-              accent={ACCENT}
               midFallback={mid}
               loading={loading}
             />
@@ -332,7 +332,7 @@ export default function TradingPage() {
 
           {/* Сделки */}
           <aside className="xl:col-span-3">
-            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden h-[420px] flex flex-col">
+            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden min-h-[520px] flex flex-col">
               <div className="px-3 py-2 text-sm font-semibold bg-white border-b flex justify-between items-center">
                 <span>Сделки</span>
                 <span className="text-xs font-normal text-slate-400">{market.symbol}</span>
