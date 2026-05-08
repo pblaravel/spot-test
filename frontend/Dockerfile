@@ -8,10 +8,12 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Копируем файлы зависимостей
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
+COPY package.json package-lock.json* pnpm-lock.yaml* .npmrc* ./
+# Pin pnpm 9.x: pnpm 11 blocks lifecycle scripts (e.g. sharp native) until approve-builds (breaks non-interactive Docker).
+RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 RUN \
   if [ -f package-lock.json ]; then npm ci --only=production; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
+  elif [ -f pnpm-lock.yaml ]; then pnpm i --frozen-lockfile; \
   else echo "Lockfile not found." && exit 1; \
   fi
 
@@ -23,6 +25,12 @@ COPY . .
 
 # Следующая строка отключает telemetry во время сборки
 ENV NEXT_TELEMETRY_DISABLED 1
+
+# Браузер ходит на хост-порт gateway; SSR-rewrites внутри compose-сети — на имя сервиса api-gateway.
+ARG NEXT_PUBLIC_API_URL=http://localhost:3000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ARG INTERNAL_API_GATEWAY_URL=http://api-gateway:3000
+ENV INTERNAL_API_GATEWAY_URL=${INTERNAL_API_GATEWAY_URL}
 
 RUN npm run build
 

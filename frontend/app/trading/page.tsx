@@ -15,6 +15,7 @@ import {
   ExchangeTrade,
   Wallet,
 } from "@/lib/api-client"
+import { TradingPriceChart } from "./trading-price-chart"
 
 interface MarketPair {
   /** Символ в order-book-service (без слэша, верхний регистр). */
@@ -187,7 +188,7 @@ export default function TradingPage() {
     const amtStr = side === "buy" ? buyAmount : sellAmount
     const qty = parseDec(amtStr)
     if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("Укажите объём BTC")
+      toast.error(`Укажите объём ${market.base}`)
       return
     }
     if (orderMode === "limit") {
@@ -259,6 +260,14 @@ export default function TradingPage() {
           </div>
         )}
 
+        {!loadErr && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600 leading-relaxed">
+            Пустой стакан нормален после старта: заявки появятся от ваших лимитных ордеров или от сервиса{" "}
+            <strong>market-maker-service</strong> (в <code className="text-[11px]">docker-compose</code> он шлёт сетку
+            в order-book-service). Если MM не запущен, выставьте лимит вручную — уровень появится в книге.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
           {/* Список пар */}
           <aside className="xl:col-span-2">
@@ -311,37 +320,19 @@ export default function TradingPage() {
             </Card>
           </aside>
 
-          {/* График (заглушка под TradingView) */}
           <section className="xl:col-span-7">
-            <Card className="rounded-xl border-slate-200 shadow-sm h-[420px] flex flex-col">
-              <div className="flex items-center gap-2 px-3 py-2 border-b bg-white">
-                {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
-                  <button
-                    key={tf}
-                    type="button"
-                    className={`px-2 py-1 text-xs rounded ${tf === "15M" ? "text-white" : "text-slate-600 hover:bg-slate-100"}`}
-                    style={tf === "15M" ? { background: ACCENT } : {}}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-              <CardContent className="flex-1 flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100/80 m-3 rounded-lg border border-dashed border-slate-200">
-                {loading ? (
-                  <Loader2 className="h-10 w-10 animate-spin text-slate-400" />
-                ) : (
-                  <p className="text-slate-500 text-sm text-center max-w-sm">
-                    График: подключите виджет TradingView или поток свечей. Сейчас отображаются стакан и сделки с
-                    order-book-service.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            <TradingPriceChart
+              pairLabel={market.display}
+              trades={trades}
+              quote={market.quote}
+              midFallback={mid}
+              loading={loading}
+            />
           </section>
 
           {/* Сделки */}
           <aside className="xl:col-span-3">
-            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden h-[420px] flex flex-col">
+            <Card className="rounded-xl border-slate-200 shadow-sm overflow-hidden min-h-[520px] flex flex-col">
               <div className="px-3 py-2 text-sm font-semibold bg-white border-b flex justify-between items-center">
                 <span>Сделки</span>
                 <span className="text-xs font-normal text-slate-400">{market.symbol}</span>

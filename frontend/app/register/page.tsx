@@ -87,7 +87,7 @@ export default function RegisterPage() {
       lastName: formData.lastName,
     })
     if (result.success) {
-      router.push("/dashboard")
+      router.push("/trading")
     } else {
       setError(result.error || "Ошибка регистрации")
     }

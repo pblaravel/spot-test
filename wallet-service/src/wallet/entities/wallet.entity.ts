@@ -1,5 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
-import { Transaction } from '../../transactions/entities/transaction.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 export enum WalletStatus {
   ACTIVE = 'active',
@@ -12,28 +11,29 @@ export class Wallet {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ name: 'user_id' })
   userId: string;
 
   @Column()
   currency: string;
 
-  @Column('decimal', { precision: 20, scale: 8, default: 0 })
+  @Column('decimal', { precision: 20, scale: 8, default: 0, name: 'balance' })
   balance: number;
 
-  @Column('decimal', { precision: 20, scale: 8, default: 0 })
+  @Column('decimal', { precision: 20, scale: 8, default: 0, name: 'locked_balance' })
   lockedBalance: number;
 
-  @Column('decimal', { precision: 20, scale: 8, default: 0 })
+  @Column('decimal', { precision: 20, scale: 8, default: 0, name: 'total_deposited' })
   totalDeposited: number;
 
-  @Column('decimal', { precision: 20, scale: 8, default: 0 })
+  @Column('decimal', { precision: 20, scale: 8, default: 0, name: 'total_withdrawn' })
   totalWithdrawn: number;
 
   @Column({
-    type: 'enum',
-    enum: WalletStatus,
-    default: WalletStatus.ACTIVE
+    type: 'varchar',
+    length: 20,
+    default: WalletStatus.ACTIVE,
+    name: 'status',
   })
   status: WalletStatus;
 
@@ -43,18 +43,15 @@ export class Wallet {
   @Column({ nullable: true })
   memo: string; // Мемо для некоторых криптовалют (XRP, XLM и т.д.)
 
-  @Column({ default: true })
+  @Column({ default: true, name: 'is_active' })
   isActive: boolean;
 
-  @Column({ nullable: true })
+  @Column({ name: 'last_activity_at', type: 'timestamp', nullable: true })
   lastActivityAt: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  @OneToMany(() => Transaction, transaction => transaction.wallet)
-  transactions: Transaction[];
-} 
+}

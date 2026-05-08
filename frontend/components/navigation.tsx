@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth'
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
-  const { isAuthenticated, user, logout } = useAuth()
+  const { isAuthenticated, isLoading, user, logout } = useAuth()
 
   // Скрываем навигацию на страницах авторизованных пользователей
   const hideNavigation =
@@ -66,7 +66,9 @@ export function Navigation() {
           </nav>
 
           <div className="hidden lg:flex items-center space-x-4">
-            {isAuthenticated ? (
+            {isLoading ? (
+              <div className="h-9 w-44 rounded-md bg-gray-100 animate-pulse" aria-hidden />
+            ) : isAuthenticated ? (
               <>
                 {user && (
                   <span className="text-gray-700 font-medium">
@@ -128,7 +130,9 @@ export function Navigation() {
                 </Link>
               ))}
               <div className="flex flex-col space-y-2 pt-4 border-t">
-                {isAuthenticated ? (
+                {isLoading ? (
+                  <div className="h-9 w-full rounded-md bg-gray-100 animate-pulse mx-3" aria-hidden />
+                ) : isAuthenticated ? (
                   <>
                     {user && (
                       <span className="text-gray-700 font-medium px-3 py-1">

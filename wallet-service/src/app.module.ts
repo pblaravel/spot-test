@@ -18,7 +18,7 @@ import { HealthController } from './health/health.controller';
       url: process.env.DATABASE_URL,
       schema: 'wallets',
       entities: [Wallet, Transaction],
-      synchronize: process.env.NODE_ENV === 'development',
+      synchronize: process.env.TYPEORM_SYNC === 'true',
     }),
     TypeOrmModule.forFeature([Wallet, Transaction]),
   ],

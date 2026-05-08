@@ -1,5 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { Wallet } from '../../wallet/entities/wallet.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 export enum TransactionType {
   DEPOSIT = 'deposit',
@@ -22,22 +21,24 @@ export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ name: 'wallet_id' })
   walletId: string;
 
-  @Column()
+  @Column({ name: 'user_id' })
   userId: string;
 
   @Column({
-    type: 'enum',
-    enum: TransactionType
+    type: 'varchar',
+    length: 20,
+    name: 'type',
   })
   type: TransactionType;
 
   @Column({
-    type: 'enum',
-    enum: TransactionStatus,
-    default: TransactionStatus.PENDING
+    type: 'varchar',
+    length: 20,
+    default: TransactionStatus.PENDING,
+    name: 'status',
   })
   status: TransactionStatus;
 
@@ -50,13 +51,13 @@ export class Transaction {
   @Column()
   currency: string;
 
-  @Column({ nullable: true })
-  txHash: string; // Хеш транзакции в блокчейне
+  @Column({ name: 'tx_hash', nullable: true })
+  txHash: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'from_address', nullable: true })
   fromAddress: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'to_address', nullable: true })
   toAddress: string;
 
   @Column({ nullable: true })
@@ -68,25 +69,21 @@ export class Transaction {
   @Column({ nullable: true })
   confirmations: number;
 
-  @Column({ nullable: true })
+  @Column({ name: 'block_number', nullable: true })
   blockNumber: number;
 
-  @Column({ nullable: true })
-  orderId: string; // ID ордера для торговых транзакций
+  @Column({ name: 'order_id', nullable: true })
+  orderId: string;
 
-  @Column({ nullable: true })
-  referenceId: string; // Внешний ID для связи с другими системами
+  @Column({ name: 'reference_id', nullable: true })
+  referenceId: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: any; // Дополнительные данные
+  metadata: any;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  @ManyToOne(() => Wallet, wallet => wallet.transactions)
-  @JoinColumn({ name: 'walletId' })
-  wallet: Wallet;
-} 
+}

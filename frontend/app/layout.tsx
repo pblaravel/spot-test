@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { AuthProvider } from "@/components/auth-provider"
 import { Navigation } from "@/components/navigation"
 import { AuthenticatedLayout } from "@/components/authenticated-layout"
 import { Toaster } from "@/components/ui/sonner"
@@ -22,9 +23,11 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
-        <Navigation />
-        <AuthenticatedLayout>{children}</AuthenticatedLayout>
-        <Toaster />
+        <AuthProvider>
+          <Navigation />
+          <AuthenticatedLayout>{children}</AuthenticatedLayout>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

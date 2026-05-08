@@ -12,34 +12,35 @@ export class User {
   @Column({ name: 'password_hash' })
   password: string;
 
-  @Column()
+  @Column({ name: 'first_name' })
   firstName: string;
 
-  @Column()
+  @Column({ name: 'last_name' })
   lastName: string;
 
-  @Column({ default: false })
+  /** В БД колонка называется is_verified (см. init-db.sql). */
+  @Column({ name: 'is_verified', default: false })
   isEmailVerified: boolean;
 
-  @Column({ default: true })
+  @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
-  @Column({ nullable: true })
+  @Column({ name: 'email_verification_token', nullable: true })
   emailVerificationToken: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'password_reset_token', nullable: true })
   passwordResetToken: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'password_reset_expires', type: 'timestamp', nullable: true })
   passwordResetExpires: Date;
 
-  @Column({ nullable: true })
+  @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
   lastLoginAt: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
   @BeforeInsert()
