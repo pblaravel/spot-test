@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-for p in 3008 3000 3001 3002 8081 8080; do fuser -k "${p}/tcp" 2>/dev/null || true; done
+for p in 3008 3000 3001 3002 3007 8081 8080; do fuser -k "${p}/tcp" 2>/dev/null || true; done
 
 if ! sudo docker compose ps postgres redis 2>/dev/null | grep -q "Up"; then
   sudo docker compose up -d postgres redis
@@ -36,11 +36,20 @@ nohup env NODE_ENV=development PORT=3001 DATABASE_URL="$DATABASE_URL" REDIS_URL=
   sh -c 'cd "'"$ROOT"'/user-service" && exec npm run start:dev' > /tmp/logs/user.log 2>&1 &
 sleep 5
 
-# --- Order book + gateway ---
+# --- Order book ---
 nohup env REDIS_URL="$REDIS_URL" PORT=8081 \
   sh -c 'cd "'"$ROOT"'/order-book-service" && exec go run .' > /tmp/logs/order-book.log 2>&1 &
-sleep 2
+sleep 3
 
+# --- Market maker (лимитная сетка + self-trade → стакан и лента сделок) ---
+nohup env NODE_ENV=development PORT=3007 \
+  ORDER_BOOK_SERVICE_URL="${ORDER_BOOK_URL:-http://127.0.0.1:8081}" \
+  REDIS_URL="$REDIS_URL" \
+  LIQUIDITY_SYMBOL="${LIQUIDITY_SYMBOL:-BTCUSDT}" \
+  sh -c 'cd "'"$ROOT"'/market-maker-service" && exec npm run start:dev' > /tmp/logs/market-maker.log 2>&1 &
+sleep 5
+
+# --- API gateway + frontend ---
 nohup env NODE_ENV=development PORT=3000 DATABASE_URL="$DATABASE_URL" REDIS_URL="$REDIS_URL" \
   USER_SERVICE_URL="http://127.0.0.1:3001" WALLET_SERVICE_URL="http://127.0.0.1:3002" \
   ORDER_BOOK_SERVICE_URL="http://127.0.0.1:8081" INTERNAL_API_KEY="$INTERNAL_KEY" \
@@ -60,5 +69,6 @@ curl -s http://127.0.0.1:3000/health | head -c 120 || true; echo
 curl -s http://127.0.0.1:3001/api/v1/health | head -c 200 || true; echo
 curl -s http://127.0.0.1:3002/api/v1/health | head -c 200 || true; echo
 curl -s http://127.0.0.1:8081/health | head -c 120 || true; echo
+curl -s http://127.0.0.1:3007/api/v1/health | head -c 160 || true; echo
 echo "Frontend: http://127.0.0.1:3008/login"
 echo "Логи: /tmp/logs/*.log"
