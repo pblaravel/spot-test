@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
 import { SidebarNavigation } from "./sidebar-navigation"
 
 interface AuthenticatedLayoutProps {
@@ -11,11 +11,10 @@ interface AuthenticatedLayoutProps {
 }
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const { isAuthenticated, logout } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
 
-  // Проверяем, находимся ли мы на странице для авторизованных пользователей.
   // Страница торговли выводится во всю ширину без левого меню.
   const isAuthenticatedPage = [
     "/dashboard",
@@ -31,16 +30,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
     "/support",
   ].some((path) => pathname.startsWith(path))
 
-  useEffect(() => {
-    // В реальном приложении здесь будет проверка токена авторизации
-    // Для демо устанавливаем true если пользователь на защищенной странице
-    if (isAuthenticatedPage) {
-      setIsAuthenticated(true)
-    }
-  }, [isAuthenticatedPage])
-
   const handleLogout = () => {
-    setIsAuthenticated(false)
+    logout()
     router.push("/")
   }
 
